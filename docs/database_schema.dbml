@@ -1,0 +1,153 @@
+Table key_stores {
+    id integer [primary key]
+    account_id integer [ref: - accounts.id]
+    public_key varchar
+    private_key varchar
+    refresh_token varchar[] [default: []]
+}
+
+Table api_keys {
+    id integer [primary key]
+    key varchar 
+    status boolean [default: true]
+    permissions varchar [enum: '0000', '1111','2222']
+}
+
+Table accounts {
+    id integer [primary key]
+    email varchar [unique]
+    user_name varchar [unique]
+    password varchar
+    avatar_url varchar
+    create_at timestamp
+}
+
+Table buyers {
+    id integer [primary key]
+    account_id integer [ref: - accounts.id]
+    full_name varchar
+    gender varchar
+}
+
+Table sellers {
+  id integer [primary key]
+  account_id integer [ref: - accounts.id]
+  verify integer [default: 0] //0:noneverfiy, 1:verified, 2:verifying
+  shop_name varchar
+  description text
+  rate decimal(2,1)
+}
+
+Table addresses {
+    id integer [primary key]
+    buyer_id integer [ref: > buyers.id, null]
+    seller_id integer [ref: > sellers.id, null]
+    address_type varchar
+    address_owner_name varchar
+    phone varchar
+    house_number varchar
+    street varchar
+    ward varchar
+    city varchar
+    note text
+}
+
+Table brands {
+  id integer [primary key]
+  name varchar
+  made_in varchar
+}
+
+Table categories {
+    id integer [primary key]
+    name varchar
+    parent_id integer [ref: > categories.id, null]
+}
+Table products {
+    id integer [primary key]
+    name varchar
+    seller_id integer [ref: > sellers.id]
+    category_id integer [ref: > categories.id]
+    brand_id integer [ref: > brands.id]
+    favorite_count integer [default: 0]
+    description text
+    sold_count integer [default: 0]
+}
+
+Table product_files{
+    id integer [primary key]
+    product_id integer [ref: > products.id]
+    file_url varchar
+}
+
+Table product_reviews {
+    id integer [primary key]
+    content text
+    product_id integer [ref: > products.id]
+    buyer_id integer [ref: > buyers.id]
+    rate decimal(2,1)
+}
+
+Table product_review_files{
+    id integer [primary key]
+    review_id integer [ref: > product_reviews.id]
+    file_url varchar
+}
+
+Table product_variants {
+    id integer [primary key]
+    product_id integer [ref: > products.id]
+    variant_name varchar
+    price decimal
+    stock integer
+    image_url varchar
+}
+
+Table cart {
+    id integer [primary key]
+    buyer_id integer [ref: > buyers.id]
+    variant_id integer [ref: > product_variants.id]
+    quantity integer
+    added_at timestamp
+}
+
+Table orders {
+    id integer [primary key]
+    buyer_id integer [ref: > buyers.id]
+    total_price decimal
+    shipping_address text
+    order_status varchar
+    payment_status varchar
+    payment_method varchar
+    discount_amount decimal
+    created_at timestamp
+}
+
+Table order_items {
+    id integer [primary key]
+    order_id integer [ref: > orders.id]
+    variant_id integer [ref: > product_variants.id]
+    quantity integer
+    price_at_purchase decimal
+}
+
+Table discounts {
+    id integer [primary key]
+    discount_code varchar [unique] 
+    voucher_type varchar
+    value decimal
+    minimum_order_value decimal
+    maximum_discount decimal
+    start_date timestamp
+    expired_date timestamp
+    quantity integer
+    seller_id integer [ref: > sellers.id, null] 
+}
+
+Table buyer_discounts {
+    id integer [primary key]
+    buyer_id integer [ref: > buyers.id]
+    discount_id integer [ref: > discounts.id]
+    is_used boolean [default: false]
+    received_at timestamp
+}

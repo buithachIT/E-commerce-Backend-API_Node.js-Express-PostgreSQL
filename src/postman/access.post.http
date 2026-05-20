@@ -1,0 +1,12 @@
+@url_dev=http://localhost:3055/v1/api/shop
+
+### SignUp - Đăng ký tài khoản Shop mới
+POST {{url_dev}}/signup
+Content-Type: application/json
+x-api-key: ead7995a27c5e17ec3dea9eb99794effb22e1e51d8f54771a258abce99f381677400f788f42b3ade31aae8dcf42e9d6b51238e3dfd1154bc2cb285b2d70d6b8e
+
+{
+    "name": "Thạch Bùi Store",
+    "email": "thachcongbui111@gmail.com",
+    "password": "mysecretpassword123"
+}
