@@ -3,13 +3,134 @@
 const instancePostgres = require("../dbs/init.postgres");
 const bcrypt = require("bcrypt");
 const crypto = require("crypto");
-const KeyTokenService = require("./keytoken.service");
-const { createTokenPair } = require("../auth/auth-utils");
+const KeyTokenService = require("./key-token.service");
+const { createTokenPair, verifyJWT } = require("../auth/auth-utils");
 const { getDataInfo } = require("../utils");
-const { BadRequestError } = require("../core/error.response");
+const {
+  BadRequestError,
+  AuthFailureError,
+  ForbiddenError,
+} = require("../core/error.response");
+const { findByEmail } = require("./user.service");
+const { FORBIDDEN } = require("../utils/status-codes.util");
 
 class AccessService {
-  static SignUp = async ({ email, password }) => {
+  static refreshToken = async ({ refreshToken, user, keyStore }) => {
+    const { userId, email } = user;
+    if (keyStore.refresh_tokens_used.includes(refreshToken)) {
+      await KeyTokenService.removeKeyById(keyStore.id);
+
+      throw new ForbiddenError("Something warning happened!! Please re-login!");
+    }
+
+    if (keyStore.refresh_token !== refreshToken)
+      throw new AuthFailureError("Shop not found!");
+
+    const foundUser = await findByEmail({ email });
+    if (!foundUser) throw new AuthFailureError("Shop not registered!");
+
+    //create new token pair
+    const tokens = await createTokenPair(
+      { userId, email },
+      keyStore.public_key,
+      keyStore.private_key,
+    );
+    //update token
+    await KeyTokenService.updateRefreshTokenUsed(
+      refreshToken,
+      tokens.refreshToken,
+    );
+    return { user, tokens };
+
+    // const foundToken =
+    //   await KeyTokenService.findByRefreshTokenUsed(refreshToken);
+    // if (foundToken) {
+    //   //decode refresh token
+    //   const { userId, email } = await verifyJWT(
+    //     refreshToken,
+    //     foundToken.private_key,
+    //   );
+    //   console.log({ userId, email });
+
+    //   //xóa tokens
+    //   await KeyTokenService.removeKeyById(foundToken.id);
+    //   throw new ForbiddenError("Something warning happened!! Please re-login!");
+    // }
+    // // If not found token, find in dbs
+    // const holderToken = await KeyTokenService.findByRefreshToken(refreshToken);
+    // if (!holderToken) throw new AuthFailureError("Shop not found!");
+
+    // //verify token
+    // const { userId, email } = await verifyJWT(
+    //   refreshToken,
+    //   holderToken.private_key,
+    // );
+    // // check userId
+    // const foundUser = await findByEmail({ email });
+    // if (!foundUser) throw new AuthFailureError("Shop not registered!");
+
+    // //create new token pair
+    // const tokens = await createTokenPair(
+    //   { userId, email },
+    //   holderToken.public_key,
+    //   holderToken.private_key,
+    // );
+    // //update token
+    // await KeyTokenService.updateRefreshTokenUsed(
+    //   refreshToken,
+    //   tokens.refreshToken,
+    // );
+    // return { user: { userId, email }, tokens };
+  };
+
+  static logout = async ({ keyStore }) => {
+    console.log(`keyStore: `, keyStore);
+    const delKey = await KeyTokenService.removeKeyById(keyStore.id);
+    console.log(`delKey: `, delKey);
+    return delKey;
+  };
+
+  static login = async ({ email, password, refreshToken = null }) => {
+    //step 1: check email dbs
+    const foundUser = await findByEmail({ email });
+    if (!foundUser) {
+      throw new BadRequestError("Shop not registered!");
+    }
+
+    //step 2 : match password
+    const match = await bcrypt.compare(password, foundUser.password);
+    if (!match) {
+      throw new AuthFailureError("Authentication error!");
+    }
+
+    //step3: generate AT & RF tokens
+    const userId = foundUser.id;
+    const privateKey = crypto.randomBytes(64).toString("hex");
+    const publicKey = crypto.randomBytes(64).toString("hex");
+    const tokens = await createTokenPair(
+      { userId, email: foundUser.email },
+      publicKey,
+      privateKey,
+    );
+
+    await KeyTokenService.createKeyToken({
+      userId,
+      publicKey,
+      privateKey,
+      refresh_token: tokens.refreshToken,
+    });
+    //step4: get data and return
+    return {
+      metadata: {
+        account: getDataInfo({
+          fields: ["email", "user_name"],
+          object: foundUser,
+        }),
+        tokens,
+      },
+    };
+  };
+  static signUp = async ({ email, password }) => {
     try {
       //Step 1: Check if email already exists
       const pool = instancePostgres.pool;
@@ -54,12 +175,18 @@ class AccessService {
         const publicKey = crypto.randomBytes(64).toString("hex");
 
         //Public key cryptography standard 1 (PKCS1) là một tiêu chuẩn mã hóa được sử dụng trong lĩnh vực mật mã học để định nghĩa cách thức mã hóa và giải mã dữ liệu bằng cách sử dụng cặp khóa công khai và khóa riêng. PKCS1 được phát triển bởi RSA Laboratories và là một phần của bộ tiêu chuẩn PKCS (Public-Key Cryptography Standards).
-        console.log({ privateKey, publicKey }); //save collection KeyStore
 
+        //create token pair
+        const tokens = await createTokenPair(
+          { userId: newAccount.rows[0].id, email },
+          publicKey,
+          privateKey,
+        );
         const publicKeyString = await KeyTokenService.createKeyToken({
           userId: newAccount.rows[0].id,
           publicKey: publicKey,
           privateKey: privateKey,
+          refresh_token: tokens.refreshToken,
         });
 
         if (!publicKeyString) {
@@ -68,14 +195,6 @@ class AccessService {
             message: "publicKeyString error!",
           };
         }
-
-        //create token pair
-        const tokens = await createTokenPair(
-          { userId: newAccount.rows[0].id, email },
-          publicKey,
-          privateKey,
-        );
-
         console.log(`check tokens: `, tokens);
         return {
           code: 201,

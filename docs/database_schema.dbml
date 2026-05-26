@@ -1,50 +1,51 @@
 Table key_stores {
     id integer [primary key]
     account_id integer [ref: - accounts.id]
-    public_key varchar
-    private_key varchar
-    refresh_token varchar[] [default: []]
+    public_key varchar [not null]
+    private_key varchar [not null]
+    refresh_token varchar [not null]                
+    refresh_tokens_used varchar[] [default: '[]']  
 }
 
 Table api_keys {
     id integer [primary key]
-    key varchar 
+    key varchar [not null, unique] 
     status boolean [default: true]
-    permissions varchar [enum: '0000', '1111','2222']
+    permissions varchar[] [default: '[]']  
 }
 
 Table accounts {
-    id integer [primary key]
-    email varchar [unique]
-    user_name varchar [unique]
-    password varchar
+    id integer [primary key]  
+    email varchar [not null, unique]
+    user_name varchar [not null, unique]
+    password varchar [not null]
     avatar_url varchar
-    create_at timestamp
+    created_at timestamp [default: `now()`] 
 }
 
 Table buyers {
     id integer [primary key]
-    account_id integer [ref: - accounts.id]
-    full_name varchar
+    account_id integer [ref: - accounts.id, not null]
+    full_name varchar [not null]
     gender varchar
 }
 
 Table sellers {
-  id integer [primary key]
-  account_id integer [ref: - accounts.id]
-  verify integer [default: 0] //0:noneverfiy, 1:verified, 2:verifying
-  shop_name varchar
-  description text
-  rate decimal(2,1)
+    id integer [primary key]
+    account_id integer [ref: - accounts.id, not null]
+    verify integer [default: 0] // 0: noneverify, 1: verified, 2: verifying
+    shop_name varchar [not null]
+    description text
+    rate decimal(2,1) [default: 5.0]
 }
 
 Table addresses {
     id integer [primary key]
     buyer_id integer [ref: > buyers.id, null]
     seller_id integer [ref: > sellers.id, null]
-    address_type varchar
-    address_owner_name varchar
-    phone varchar
+    address_type varchar // 'Home', 'Office'
+    address_owner_name varchar [not null]
+    phone varchar [not null]
     house_number varchar
     street varchar
     ward varchar
@@ -53,101 +54,93 @@ Table addresses {
 }
 
 Table brands {
-  id integer [primary key]
-  name varchar
-  made_in varchar
+    id integer [primary key]
+    name varchar [not null, unique]
+    made_in varchar
 }
 
 Table categories {
     id integer [primary key]
-    name varchar
-    parent_id integer [ref: > categories.id, null]
+    name varchar [not null]
+    parent_id integer [ref: > categories.id, null] 
 }
+
 Table products {
     id integer [primary key]
-    name varchar
-    seller_id integer [ref: > sellers.id]
+    name varchar [not null]
+    seller_id integer [ref: > sellers.id, not null]  
     category_id integer [ref: > categories.id]
     brand_id integer [ref: > brands.id]
     favorite_count integer [default: 0]
     description text
     sold_count integer [default: 0]
+    
+     product_attributes jsonb [default: '{}'] 
+    
+    created_at timestamp [default: `now()`]
+    updated_at timestamp [default: `now()`]
 }
 
-Table product_files{
+Table product_files {
     id integer [primary key]
-    product_id integer [ref: > products.id]
-    file_url varchar
-}
-
-Table product_reviews {
-    id integer [primary key]
-    content text
-    product_id integer [ref: > products.id]
-    buyer_id integer [ref: > buyers.id]
-    rate decimal(2,1)
-}
-
-Table product_review_files{
-    id integer [primary key]
-    review_id integer [ref: > product_reviews.id]
-    file_url varchar
+    product_id integer [ref: > products.id, not null]
+    file_url varchar [not null]  
 }
 
 Table product_variants {
     id integer [primary key]
-    product_id integer [ref: > products.id]
-    variant_name varchar
-    price decimal
-    stock integer
+    product_id integer [ref: > products.id, not null]
+    variant_name varchar [not null] // Ví dụ: 'Đỏ, Size M' hoặc 'Xanh, Size L'
+    price decimal [not null]
+    stock integer [default: 0]
     image_url varchar
 }
 
 Table cart {
     id integer [primary key]
-    buyer_id integer [ref: > buyers.id]
-    variant_id integer [ref: > product_variants.id]
-    quantity integer
-    added_at timestamp
+    buyer_id integer [ref: > buyers.id, not null]
+    variant_id integer [ref: > product_variants.id, not null]
+    quantity integer [default: 1]
+    added_at timestamp [default: `now()`]
 }
 
 Table orders {
     id integer [primary key]
-    buyer_id integer [ref: > buyers.id]
-    total_price decimal
-    shipping_address text
-    order_status varchar
-    payment_status varchar
-    payment_method varchar
-    discount_amount decimal
-    created_at timestamp
+    buyer_id integer [ref: > buyers.id, not null]
+    total_price decimal [not null]
+    shipping_address text [not null]  
+    order_status varchar [default: 'pending'] // pending, shipped, delivered, cancelled
+    payment_status varchar [default: 'unpaid'] // unpaid, paid, refunded
+    payment_method varchar // COD, VNPAY, MOMO
+    discount_amount decimal [default: 0]
+    created_at timestamp [default: `now()`]
 }
 
 Table order_items {
     id integer [primary key]
-    order_id integer [ref: > orders.id]
-    variant_id integer [ref: > product_variants.id]
-    quantity integer
-    price_at_purchase decimal
+    order_id integer [ref: > orders.id, not null]
+    variant_id integer [ref: > product_variants.id, not null]
+    quantity integer [not null]
+    price_at_purchase decimal [not null] // Lưu giá tại thời điểm mua, tránh việc shop đổi giá sản phẩm làm sai hóa đơn cũ!
 }
 
 Table discounts {
     id integer [primary key]
-    discount_code varchar [unique] 
-    voucher_type varchar
-    value decimal
-    minimum_order_value decimal
+    discount_code varchar [not null, unique] 
+    voucher_type varchar [not null] // 'fixed_amount', 'percentage'
+    value decimal [not null]
+    minimum_order_value decimal [default: 0]
     maximum_discount decimal
-    start_date timestamp
-    expired_date timestamp
-    quantity integer
-    seller_id integer [ref: > sellers.id, null] 
+    start_date timestamp [not null]
+    expired_date timestamp [not null]
+    quantity integer [not null] // Số lượng voucher còn lại
+    seller_id integer [ref: > sellers.id, null] // Nếu null thì là voucher hệ thống (Toàn sàn)
 }
 
 Table buyer_discounts {
     id integer [primary key]
-    buyer_id integer [ref: > buyers.id]
-    discount_id integer [ref: > discounts.id]
+    buyer_id integer [ref: > buyers.id, not null]
+    discount_id integer [ref: > discounts.id, not null]
     is_used boolean [default: false]
-    received_at timestamp
+    received_at timestamp [default: `now()`]
 }

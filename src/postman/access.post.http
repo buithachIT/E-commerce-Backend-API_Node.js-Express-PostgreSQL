@@ -10,3 +10,24 @@ x-api-key: ead7995a27c5e17ec3dea9eb99794effb22e1e51d8f54771a258abce99f381677400f
     "email": "thachcongbui111@gmail.com",
     "password": "mysecretpassword123"
 }
+
+### SignIn - Đăng nhập tài khoản Shop
+POST {{url_dev}}/signin
+Content-Type: application/json
+x-api-key: ead7995a27c5e17ec3dea9eb99794effb22e1e51d8f54771a258abce99f381677400f788f42b3ade31aae8dcf42e9d6b51238e3dfd1154bc2cb285b2d70d6b8e 
+
+{
+    "email": "thachcongbui111@gmail.com",
+    "password": "mysecretpassword123"
+}
+
+### Logout - Đăng xuất tài khoản Shop
+POST {{url_dev}}/logout
+Content-Type: application/json
+x-api-key: ead7995a27c5e17ec3dea9eb99794effb22e1e51d8f54771a258abce99f381677400f788f42b3ade31aae8dcf42e9d6b51238e3dfd1154bc2cb285b2d70d6b8e
+Authorization: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOjI0LCJlbWFpbCI6InRoYWNoY29uZ2J1aTExMUBnbWFpbC5jb20iLCJpYXQiOjE3NzkzODg5MTEsImV4cCI6MTc3OTU2MTcxMX0.eT4ilZoTGyhTiIKwS2Qq1cuoVQPx1BRO5tFNvTrUgz4
+x-client-id: 24
+
+
+
+eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOjI0LCJlbWFpbCI6InRoYWNoY29uZ2J1aTExMUBnbWFpbC5jb20iLCJpYXQiOjE3Nzk1NDcwMjQsImV4cCI6MTc4MDE1MTgyNH0.zRH9Ci3PFoPAMc9kdAJ12zPBPghe2Wb9SvaNSgFOUKc
