@@ -1,4 +1,3 @@
--- 1. Bảng tài khoản
 CREATE TABLE accounts (
     id SERIAL PRIMARY KEY,
     email VARCHAR(255) UNIQUE NOT NULL,
@@ -8,148 +7,83 @@ CREATE TABLE accounts (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- 2. Bảng người mua
-CREATE TABLE buyers (
+create table key_stores (
     id SERIAL PRIMARY KEY,
-    account_id INTEGER UNIQUE NOT NULL REFERENCES accounts(id) ON DELETE CASCADE, -- Viết gộp cho sạch
-    full_name VARCHAR(255) NOT NULL,
-    gender VARCHAR(50)
+    account_id INTEGER UNIQUE NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+    public_key TEXT NOT NULL,
+    private_key TEXT NOT NULL,
+    refresh_token VARCHAR(255),
+    refresh_token_used VARCHAR(255)[] DEFAULT '{}',
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- 3. Bảng người bán
-CREATE TABLE sellers (
+CREATE TYPE key_permission AS ENUM ('0000', '1111', '2222');
+
+CREATE TABLE IF NOT EXISTS api_keys (
     id SERIAL PRIMARY KEY,
-    account_id INTEGER UNIQUE NOT NULL REFERENCES accounts(id) ON DELETE CASCADE, -- Viết gộp cho sạch
-    shop_name VARCHAR(255),
-    verify INTEGER DEFAULT 0 CHECK (verify IN (0, 1, 2)),
-    description TEXT,
-    rate DECIMAL(2,1) DEFAULT 0.0
+    key VARCHAR(255) NOT NULL UNIQUE,
+    status BOOLEAN DEFAULT TRUE,
+    
+    permissions key_permission[] NOT NULL, 
+    
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- 4. Bảng địa chỉ
-CREATE TABLE addresses (
-    id SERIAL PRIMARY KEY,
-    buyer_id INTEGER REFERENCES buyers(id) ON DELETE CASCADE,
-    seller_id INTEGER REFERENCES sellers(id) ON DELETE CASCADE,
-    address_type VARCHAR(50),
-    address_owner_name VARCHAR(150),
-    phone VARCHAR(20),
-    house_number VARCHAR(100),
-    street VARCHAR(150),
-    ward VARCHAR(100),
-    city VARCHAR(100),
-    note TEXT
+CREATE TABLE IF NOT EXISTS products (
+    id UUID PRIMARY KEY,                               
+    product_name VARCHAR(255) NOT NULL,                 
+    product_thumb VARCHAR(255) NOT NULL,                 
+    product_description TEXT,                            
+    product_price DECIMAL(12, 2) NOT NULL,               
+    product_quantity INTEGER NOT NULL DEFAULT 0,       
+    product_type VARCHAR(50) NOT NULL,                   
+    product_shop INTEGER NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,                       
+    
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
--- 5. Bảng thương hiệu
-CREATE TABLE brands (
-    id SERIAL PRIMARY KEY,
-    name VARCHAR(150) NOT NULL,
-    made_in VARCHAR(100)
+CREATE TABLE electronics_products (
+    id UUID PRIMARY KEY,
+    manufacturer VARCHAR(100) NOT NULL,
+    model VARCHAR(100) NOT NULL,
+    product_shop INTEGER NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+    color VARCHAR(50) NOT NULL
 );
 
--- 6. Bảng danh mục sản phẩm
-CREATE TABLE categories (
-    id SERIAL PRIMARY KEY,
-    name VARCHAR(150) NOT NULL,
-    parent_id INTEGER REFERENCES categories(id) ON DELETE SET NULL
+CREATE TABLE clothing_products (
+    id UUID PRIMARY KEY,
+    brand VARCHAR(100) NOT NULL,
+    size VARCHAR(50) NOT NULL,
+    product_shop INTEGER NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+    material VARCHAR(100) NOT NULL
 );
 
--- 7. Bảng sản phẩm
-CREATE TABLE products (
-    id SERIAL PRIMARY KEY,
-    name VARCHAR(255) NOT NULL,
-    seller_id INTEGER NOT NULL REFERENCES sellers(id) ON DELETE CASCADE, -- Hết bị lỗi nhờ sellers(id) đã có SERIAL PRIMARY KEY
-    category_id INTEGER NOT NULL REFERENCES categories(id),
-    brand_id INTEGER REFERENCES brands(id) ON DELETE SET NULL,
-    favorite_count INTEGER DEFAULT 0,
-    description TEXT,
-    sold_count INTEGER DEFAULT 0
+CREATE TABLE inventories (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    inven_product_id UUID NOT NULL,     
+    inven_location VARCHAR(255) DEFAULT 'unKnow',
+    inven_stock INT NOT NULL DEFAULT 0 CHECK (inven_stock >= 0), 
+    inven_shop_id INTEGER NOT NULL, 
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    
+    CONSTRAINT fk_inventory_product FOREIGN KEY (inven_product_id) REFERENCES products(id) ON DELETE CASCADE,
+    CONSTRAINT fk_inventory_shop FOREIGN KEY (inven_shop_id) REFERENCES accounts(id) ON DELETE CASCADE
 );
 
--- 8. Bảng file sản phẩm
-CREATE TABLE product_files (
-    id SERIAL PRIMARY KEY,
-    product_id INTEGER NOT NULL REFERENCES products(id) ON DELETE CASCADE,
-    file_url VARCHAR(255) NOT NULL
+ CREATE UNIQUE INDEX idx_inventory_product_shop ON inventories(inven_product_id, inven_shop_id);
+ 
+CREATE TABLE inventory_reservations (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    inventory_id UUID NOT NULL,  
+    cart_id UUID NOT NULL,
+    num_stock INT NOT NULL CHECK (num_stock > 0),
+    created_on TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    
+    CONSTRAINT fk_reservation_inventory FOREIGN KEY (inventory_id) REFERENCES inventories(id) ON DELETE CASCADE
 );
 
--- 9. Bảng đánh giá sản phẩm
-CREATE TABLE product_reviews (
-    id SERIAL PRIMARY KEY,
-    content TEXT,
-    product_id INTEGER NOT NULL REFERENCES products(id) ON DELETE CASCADE,
-    buyer_id INTEGER NOT NULL REFERENCES buyers(id) ON DELETE CASCADE,
-    rate DECIMAL(2,1) NOT NULL CHECK (rate >= 1.0 AND rate <= 5.0)
-);
-
--- 10. Bảng file đánh giá sản phẩm
-CREATE TABLE product_review_files (
-    id SERIAL PRIMARY KEY,
-    review_id INTEGER NOT NULL REFERENCES product_reviews(id) ON DELETE CASCADE,
-    file_url VARCHAR(255) NOT NULL
-);
-
--- 11. Bảng biến thể sản phẩm
-CREATE TABLE product_variants (
-    id SERIAL PRIMARY KEY,
-    product_id INTEGER NOT NULL REFERENCES products(id) ON DELETE CASCADE,
-    variant_name VARCHAR(150) NOT NULL,
-    price DECIMAL(12,2) NOT NULL,
-    stock INTEGER NOT NULL DEFAULT 0,
-    image_url VARCHAR(255)
-);
-
--- 12. Bảng giỏ hàng
-CREATE TABLE cart (
-    id SERIAL PRIMARY KEY,
-    buyer_id INTEGER NOT NULL REFERENCES buyers(id) ON DELETE CASCADE,
-    variant_id INTEGER NOT NULL REFERENCES product_variants(id) ON DELETE CASCADE,
-    quantity INTEGER NOT NULL CHECK (quantity > 0),
-    added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
--- 13. Bảng đơn hàng
-CREATE TABLE orders (
-    id SERIAL PRIMARY KEY,
-    buyer_id INTEGER NOT NULL REFERENCES buyers(id),
-    total_price DECIMAL(12,2) NOT NULL,
-    shipping_address TEXT NOT NULL,
-    order_status VARCHAR(50) DEFAULT 'pending',
-    payment_status VARCHAR(50) DEFAULT 'unpaid',
-    payment_method VARCHAR(50),
-    discount_amount DECIMAL(12,2) DEFAULT 0.0,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
--- 14. Bảng chi tiết đơn hàng
-CREATE TABLE order_items (
-    id SERIAL PRIMARY KEY,
-    order_id INTEGER NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
-    variant_id INTEGER NOT NULL REFERENCES product_variants(id),
-    quantity INTEGER NOT NULL CHECK (quantity > 0),
-    price_at_purchase DECIMAL(12,2) NOT NULL
-);
-
--- 15. Bảng mã giảm giá
-CREATE TABLE discounts (
-    id SERIAL PRIMARY KEY,
-    discount_code VARCHAR(50) UNIQUE NOT NULL,
-    voucher_type VARCHAR(50) NOT NULL,
-    value DECIMAL(12,2) NOT NULL,
-    minimum_order_value DECIMAL(12,2) DEFAULT 0.0,
-    maximum_discount DECIMAL(12,2),
-    start_date TIMESTAMP NOT NULL,
-    expired_date TIMESTAMP NOT NULL,
-    quantity INTEGER NOT NULL CHECK (quantity >= 0),
-    seller_id INTEGER REFERENCES sellers(id) ON DELETE CASCADE
-);
-
--- 16. Bảng mã giảm giá của người mua
-CREATE TABLE buyer_discounts (
-    id SERIAL PRIMARY KEY,
-    buyer_id INTEGER NOT NULL REFERENCES buyers(id) ON DELETE CASCADE,
-    discount_id INTEGER NOT NULL REFERENCES discounts(id) ON DELETE CASCADE,
-    is_used BOOLEAN DEFAULT FALSE,
-    received_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
+ CREATE INDEX idx_reservation_cart ON inventory_reservations(cart_id);

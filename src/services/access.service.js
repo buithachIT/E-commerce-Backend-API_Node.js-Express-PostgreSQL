@@ -1,6 +1,6 @@
 "use strict";
 
-const instancePostgres = require("../dbs/init.postgres");
+const { pool } = require("../dbs/init.postgres");
 const bcrypt = require("bcrypt");
 const crypto = require("crypto");
 const KeyTokenService = require("./key-token.service");
@@ -84,9 +84,7 @@ class AccessService {
   };
 
   static logout = async ({ keyStore }) => {
-    console.log(`keyStore: `, keyStore);
     const delKey = await KeyTokenService.removeKeyById(keyStore.id);
-    console.log(`delKey: `, delKey);
     return delKey;
   };
 
@@ -133,7 +131,6 @@ class AccessService {
   static signUp = async ({ email, password }) => {
     try {
       //Step 1: Check if email already exists
-      const pool = instancePostgres.pool;
 
       const checkEmailQuery = "SELECT * FROM accounts WHERE email=$1 LIMIT 1";
 

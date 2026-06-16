@@ -81,6 +81,29 @@ Table products {
     updated_at timestamp [default: `now()`]
 }
 
+CREATE TABLE product_variants (
+    id SERIAL PRIMARY KEY,
+    product_id UUID NOT NULL REFERENCES products(id) ON DELETE CASCADE, -- Khóa ngoại trỏ về cha
+    
+    sku VARCHAR(100) UNIQUE NOT NULL, -- Mã định danh kho (Ví dụ: IPHONE15-BLACK-128GB)
+    variant_name VARCHAR(255) NOT NULL, -- Ví dụ: "Đen / 128GB"
+    price DECIMAL(12,2) NOT NULL,       -- Giá riêng cho biến thể này
+    stock_quantity INTEGER NOT NULL DEFAULT 0, -- Kho riêng cho biến thể này
+    
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Đánh index khóa ngoại để JOIN cho nhanh
+CREATE INDEX idx_product_variants_product_id ON product_variants(product_id);
+
+ALTER TABLE products
+    ADD COLUMN textsearchable_index_col tsvector
+    GENERATED ALWAYS AS (
+        to_tsvector('english', coalesce(product_name, '') || ' ' || coalesce(product_description, ''))
+    ) STORED;
+CREATE INDEX cds_product_textsearch_idx ON products USING GIN (textsearchable_index_col);
+
+
 Table product_files {
     id integer [primary key]
     product_id integer [ref: > products.id, not null]

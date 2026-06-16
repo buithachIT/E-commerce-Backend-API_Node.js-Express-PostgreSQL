@@ -1,10 +1,8 @@
 "use strict";
 
-const instancePostgres = require("../dbs/init.postgres");
+const { pool } = require("../dbs/init.postgres");
 const crypto = require("crypto");
 const findById = async (key) => {
-  const pool = instancePostgres.pool;
-
   try {
     const findKeyQuery =
       "SELECT key, permissions FROM api_keys WHERE key=$1 AND status = true LIMIT 1";
@@ -22,6 +20,7 @@ const findById = async (key) => {
     throw error;
   }
 };
+
 module.exports = {
   findById,
 };

@@ -1,6 +1,6 @@
 "use strict";
 
-const instancePostgres = require("../dbs/init.postgres");
+const { pool } = require("../dbs/init.postgres");
 
 class KeyTokenService {
   static createKeyToken = async ({
@@ -9,7 +9,6 @@ class KeyTokenService {
     privateKey,
     refresh_token,
   }) => {
-    const pool = instancePostgres.pool;
     try {
       // const createKeyStoresQuery = `INSERT INTO key_stores (account_id, public_key, private_key) VALUES ($1, $2, $3) RETURNING *`;
 
@@ -43,7 +42,6 @@ class KeyTokenService {
     }
   };
   static findUserById = async (userId) => {
-    const pool = instancePostgres.pool;
     const findUserByIdQuery =
       "SELECT * FROM key_stores WHERE account_id = $1 LIMIT 1 FOR UPDATE";
 
@@ -53,7 +51,6 @@ class KeyTokenService {
   };
 
   static removeKeyById = async (id) => {
-    const pool = instancePostgres.pool;
     const removeKeyByIdQuery =
       "DELETE FROM key_stores WHERE id = $1 RETURNING id";
 
@@ -62,7 +59,6 @@ class KeyTokenService {
   };
 
   static findByRefreshTokenUsed = async (refreshToken) => {
-    const pool = instancePostgres.pool;
     const findByRefreshTokenUsed =
       "SELECT * FROM key_stores WHERE refresh_tokens_used @> $1::varchar[] LIMIT 1";
 
@@ -70,7 +66,6 @@ class KeyTokenService {
     return result.rows.length > 0 ? result.rows[0] : null;
   };
   static deleteKeyById = async (userId) => {
-    const pool = instancePostgres.pool;
     const deleteKeyByIdQuery =
       "DELETE FROM key_stores WHERE account_id = $1 RETURNING id";
 
@@ -78,7 +73,6 @@ class KeyTokenService {
     return result.rows.length > 0 ? result.rows[0] : null;
   };
   static findByRefreshToken = async (refreshToken) => {
-    const pool = instancePostgres.pool;
     const findByRefreshTokenQuery =
       "SELECT * FROM key_stores WHERE refresh_token = $1 LIMIT 1";
 
@@ -86,7 +80,6 @@ class KeyTokenService {
     return result.rows.length > 0 ? result.rows[0] : null;
   };
   static updateRefreshTokenUsed = async (refreshTokenUsed, newRefreshToken) => {
-    const pool = instancePostgres.pool;
     const updateRefreshTokenUsedQuery = `
       UPDATE key_stores
       SET refresh_tokens_used = array_append(refresh_tokens_used, $1), refresh_token = $2
