@@ -155,6 +155,10 @@ const findAllProducts = async ({
   values.push(offset);
   const offsetPlaceholder = `$${values.length}`;
 
+  if (filter.product_ids && filter.product_ids.length > 0) {
+    values.push(filter.product_ids);
+    whereClauses.push(`p.id = ANY($${values.length})`);
+  }
   const sql = `
     SELECT ${selectColumns}
     FROM products p

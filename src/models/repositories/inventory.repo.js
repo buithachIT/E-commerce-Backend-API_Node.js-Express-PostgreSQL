@@ -1,3 +1,5 @@
+"use strict";
+
 const insertInventory = async ({
   client,
   inven_product_id,

@@ -7,7 +7,7 @@ CREATE TABLE accounts (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-create table key_stores (
+CREATE TABLE key_stores (
     id SERIAL PRIMARY KEY,
     account_id INTEGER UNIQUE NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
     public_key TEXT NOT NULL,
@@ -74,7 +74,7 @@ CREATE TABLE inventories (
     CONSTRAINT fk_inventory_shop FOREIGN KEY (inven_shop_id) REFERENCES accounts(id) ON DELETE CASCADE
 );
 
- CREATE UNIQUE INDEX idx_inventory_product_shop ON inventories(inven_product_id, inven_shop_id);
+CREATE UNIQUE INDEX idx_inventory_product_shop ON inventories(inven_product_id, inven_shop_id);
  
 CREATE TABLE inventory_reservations (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -86,4 +86,49 @@ CREATE TABLE inventory_reservations (
     CONSTRAINT fk_reservation_inventory FOREIGN KEY (inventory_id) REFERENCES inventories(id) ON DELETE CASCADE
 );
 
- CREATE INDEX idx_reservation_cart ON inventory_reservations(cart_id);
+CREATE INDEX idx_reservation_cart ON inventory_reservations(cart_id);
+
+CREATE TABLE discounts (
+    id SERIAL PRIMARY KEY,
+    discount_name VARCHAR(255) NOT NULL,
+    discount_description TEXT,
+    discount_type VARCHAR(50) NOT NULL DEFAULT 'fixed_amount',
+    discount_value DECIMAL(12, 2) NOT NULL CHECK (discount_value >= 0),
+    discount_code VARCHAR(50) UNIQUE NOT NULL,
+    discount_start_date TIMESTAMP WITH TIME ZONE NOT NULL,
+    discount_end_date TIMESTAMP WITH TIME ZONE NOT NULL,
+    discount_max_uses INT NOT NULL DEFAULT 0 CHECK (discount_max_uses >= 0),
+    discount_used_count INT NOT NULL DEFAULT 0 CHECK (discount_used_count >= 0),
+    discount_users_used VARCHAR(255)[] DEFAULT '{}',
+    discount_max_uses_per_user INT NOT NULL DEFAULT 0 CHECK (discount_max_uses_per_user >= 0),
+    discount_min_order_value DECIMAL(12, 2) NOT NULL DEFAULT 0 CHECK (discount_min_order_value >= 0),
+    discount_max_value DECIMAL(12, 2) NOT NULL DEFAULT 0 CHECK (discount_max_value >= 0),
+    discount_shopId INTEGER NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+    discount_is_active BOOLEAN DEFAULT TRUE,
+    discount_apply_to VARCHAR(255) NOT NULL DEFAULT 'all' CHECK (discount_apply_to IN ('all', 'specific'))
+    discount_product_ids UUID[] DEFAULT '{}'
+
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+);
+
+
+CREATE TABLE cart (
+    id SERIAL PRIMARY KEY,
+    cart_userid VARCHAR(255) NOT NULL UNIQUE,  
+    cart_state VARCHAR(50) NOT NULL DEFAULT 'active' CHECK (cart_state IN ('active', 'completed', 'failed', 'pending')),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+CREATE TABLE cart_items (
+    id SERIAL PRIMARY KEY,
+    cart_id INT NOT NULL REFERENCES cart(id) ON DELETE CASCADE,  
+    product_id UUID NOT NULL, 
+    quantity INT NOT NULL DEFAULT 1 CHECK (quantity > 0),  
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    
+    CONSTRAINT unique_cart_product UNIQUE (cart_id, product_id) 
+);
+CREATE INDEX idx_cart_userid ON cart(cart_userid);
