@@ -50,6 +50,8 @@ class CartService {
 
     return result.rows[0];
   }
+
+  static async updateCartQuantity({ cartId, userId }) {}
 }
 
 module.exports = CartService;
