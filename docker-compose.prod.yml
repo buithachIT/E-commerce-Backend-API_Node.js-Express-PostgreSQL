@@ -10,7 +10,6 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./docs/shopee_clone_db.sql:/docker-entrypoint-initdb.d/01_schema.sql:ro
-    # Do NOT expose Postgres to the public internet
     expose:
       - "5432"
     healthcheck:
@@ -42,7 +41,7 @@ services:
       PROD_DB_PASSWORD: ${PROD_DB_PASSWORD}
       PROD_DB_NAME: ${PROD_DB_NAME}
       APP_URL: ${APP_URL:-https://api-ecommerce.nasbui.site}
-    # Only reachable from host / Nginx on localhost
+    # Host health checks / local curl. NPM should reach API via Docker network (see npm_proxy).
     ports:
       - "127.0.0.1:3055:3055"
     depends_on:
@@ -50,6 +49,7 @@ services:
         condition: service_healthy
     networks:
       - ecommerce
+      - npm_proxy
 
 volumes:
   postgres_data:
@@ -57,3 +57,8 @@ volumes:
 networks:
   ecommerce:
     driver: bridge
+  # Join existing Nginx Proxy Manager network so NPM can forward to ecommerce-api:3055
+  # Find name: docker network ls | grep -i proxy
+  npm_proxy:
+    external: true
+    name: ${NPM_NETWORK:-nginxproxymanager_default}

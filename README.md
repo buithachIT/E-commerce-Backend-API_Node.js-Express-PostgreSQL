@@ -90,7 +90,7 @@ Request flow: **Route → Controller → Service → Repository → PostgreSQL**
 
 ## Getting started
 
-See also: [Deploy & CI/CD guide](docs/DEPLOY.md) — Cloudflare + VPS (`api-ecommerce.nasbui.site`).
+See also: [Deploy & CI/CD](docs/DEPLOY.md) — Cloudflare + **Nginx Proxy Manager** + VPS (`api-ecommerce.nasbui.site`).
 
 ### Prerequisites
 - Node.js 18+
