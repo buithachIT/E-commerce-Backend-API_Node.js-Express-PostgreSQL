@@ -8,6 +8,7 @@ class CartController {
       metadata: await CartService.getListItemsUserCart(req.user.userId),
     });
   };
+
   addToCart = async (req, res, next) => {
     OK.send(res, {
       message: "Added to cart!",
@@ -17,5 +18,33 @@ class CartController {
       }),
     });
   };
+
+  updateCartQuantity = async (req, res, next) => {
+    OK.send(res, {
+      message: "Updated cart quantity!",
+      metadata: await CartService.updateCartQuantity({
+        userId: req.user.userId,
+        ...req.body,
+      }),
+    });
+  };
+
+  deleteCartItem = async (req, res, next) => {
+    OK.send(res, {
+      message: "Deleted cart item!",
+      metadata: await CartService.deleteCartItem({
+        userId: req.user.userId,
+        productId: req.params.productId || req.body.productId,
+      }),
+    });
+  };
+
+  clearCart = async (req, res, next) => {
+    OK.send(res, {
+      message: "Cleared cart!",
+      metadata: await CartService.clearCart(req.user.userId),
+    });
+  };
 }
+
 module.exports = new CartController();

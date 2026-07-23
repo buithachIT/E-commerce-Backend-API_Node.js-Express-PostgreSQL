@@ -3,11 +3,18 @@
 const { BadRequestError } = require("../core/error.response");
 const { pool } = require("../dbs/init.postgres");
 const {
-  findAllDiscountCodesSelect,
   findAllDiscountCodesUnSelect,
   checkDiscountCodeExists,
 } = require("../models/repositories/discount.repo");
 const { findAllProducts } = require("../models/repositories/product.repo");
+
+const getProductLineTotal = (product) => {
+  const qty = product.quantity ?? product.product_quantity ?? 1;
+  const price = Number(product.product_price) || 0;
+  return price * qty;
+};
+
+const getProductId = (product) => product.product_id || product.id;
 
 /*
     Discount Services
@@ -37,11 +44,12 @@ class DiscountService {
       max_uses,
       max_uses_per_user,
     } = payload;
-    if (new Date() > new Date(end_date) || new Date() < new Date(start_date)) {
-      throw new BadRequestError("Invalid discount code validity period");
-    }
+
     if (new Date(start_date) > new Date(end_date)) {
       throw new BadRequestError("Start date cannot be after end date");
+    }
+    if (new Date(end_date) < new Date()) {
+      throw new BadRequestError("End date must be in the future");
     }
     if (type === "percentage" && (value <= 0 || value > 100)) {
       throw new BadRequestError(
@@ -59,6 +67,7 @@ class DiscountService {
         "For specific product discounts, product must be provided",
       );
     }
+
     const foundDiscount = await pool.query(
       "SELECT * FROM discounts WHERE discount_code = $1 AND discount_shopId = $2",
       [code, shopId],
@@ -95,7 +104,7 @@ class DiscountService {
       code,
       start_date,
       end_date,
-      is_active,
+      is_active ?? true,
       shopId,
       min_order_value || 0,
       product_ids || [],
@@ -104,9 +113,9 @@ class DiscountService {
       description,
       type,
       value,
-      max_value,
-      max_uses,
-      0, // uses_count starts at 0
+      max_value || 0,
+      max_uses || 0,
+      0,
       max_uses_per_user || 0,
     ];
     const newDiscount = await pool.query(createDiscountQuery, values);
@@ -114,7 +123,6 @@ class DiscountService {
   }
 
   static async getAllDiscountCodes(shopId) {
-    console.log("shopId", shopId);
     const getDiscountsQuery = `
       SELECT * FROM discounts WHERE discount_shopId = $1
     `;
@@ -125,109 +133,170 @@ class DiscountService {
   static async getAllDiscountCodesWithProducts({
     code,
     shopId,
-    userId,
     limit,
     page,
   }) {
-    const foundDiscount = await pool.query(
-      "SELECT * FROM discounts WHERE discount_code = $1 AND discount_shopId = $2",
-      [code, shopId],
-    );
-    if (foundDiscount.rows.length === 0) {
-      throw new BadRequestError("Discount code not found for this shop");
-    }
-
-    const { discount_applies_to, discount_product_ids } = foundDiscount.rows[0];
-
-    if (discount_applies_to === "all") {
-      const product = findAllProducts({
-        filters: { is_published: true, is_draft: false, product_shop: shopId },
-        productIds: discount_product_ids,
-        limit: +limit,
-        page: +page,
-        sort: "ctime",
-        select: ["id", "product_name", "product_price", "product_thumb"],
-      });
-      return product;
-    }
-    if (discount_applies_to === "specific") {
-      const product = findAllProducts({
-        filters: {
-          is_published: true,
-          is_draft: false,
-          product_ids: discount_product_ids,
-        },
-        productIds: discount_product_ids,
-        limit: +limit,
-        page: +page,
-        sort: "ctime",
-        select: ["id", "product_name", "product_price", "product_thumb"],
-      });
-      return product;
-    }
-    const discounts = await pool.query(getDiscountsQuery, [shopId]);
-    return discounts.rows;
-  }
-
-  static async getAllDiscountCodesByShop({ limit, page, shopId }) {
-    const discount = await findAllDiscountCodesUnSelect({
-      limit: +limit,
-      page: +page,
-      filter: { discount_shopId: shopId, discount_is_active: true },
-      unSelect: [discount_shopId],
-    });
-    return discount;
-  }
-
-  static async getDiscountAmount({ codeId, userId, shopId, products }) {
-    const foundDiscount = await checkDiscountCodeExists(codeId, shopId);
+    const foundDiscount = await checkDiscountCodeExists(code, shopId);
     if (!foundDiscount) {
       throw new BadRequestError("Discount code not found for this shop");
     }
+
+    const { discount_apply_to, discount_product_ids } = foundDiscount;
+
+    const productSelect = [
+      "product_name",
+      "product_price",
+      "product_thumb",
+    ];
+
+    let products = [];
+    if (discount_apply_to === "all") {
+      products = await findAllProducts({
+        filter: { product_shop: shopId },
+        limit: +limit,
+        page: +page,
+        sort: "ctime",
+        select: productSelect,
+      });
+    } else if (discount_apply_to === "specific") {
+      products = await findAllProducts({
+        filter: { product_ids: discount_product_ids },
+        limit: +limit,
+        page: +page,
+        sort: "ctime",
+        select: productSelect,
+      });
+    }
+
+    return {
+      discount: foundDiscount,
+      products,
+    };
+  }
+
+  static async getAllDiscountCodesByShop({ limit, page, shopId }) {
+    return findAllDiscountCodesUnSelect({
+      limit: +limit,
+      page: +page,
+      filter: { discount_shopId: shopId, discount_is_active: true },
+      unSelect: ["discount_shopId"],
+    });
+  }
+
+  static async getDiscountAmount({ code, userId, shopId, products = [] }) {
+    if (!code) {
+      throw new BadRequestError("Discount code is required!");
+    }
+    if (!shopId) {
+      throw new BadRequestError("shopId is required!");
+    }
+    if (!products.length) {
+      throw new BadRequestError("Products are required!");
+    }
+
+    const foundDiscount = await checkDiscountCodeExists(code, shopId);
+    if (!foundDiscount) {
+      throw new BadRequestError("Discount code not found for this shop");
+    }
+
     const {
       discount_type,
       discount_value,
       discount_max_value,
       discount_min_order_value,
-      discount_applies_to,
+      discount_apply_to,
       discount_product_ids,
+      discount_is_active,
+      discount_max_uses,
+      discount_used_count,
+      discount_users_used,
+      discount_max_uses_per_user,
+      discount_start_date,
+      discount_end_date,
     } = foundDiscount;
+
     if (!discount_is_active) {
       throw new BadRequestError("Discount code is not active");
     }
-    if (!discount_max_uses || discount_max_uses <= 0) {
-      throw new BadRequestError("Discount code has reached maximum uses");
-    }
-    if (discount_users_used.includes(userId)) {
-      throw new BadRequestError("User has already used this discount code");
-    }
+
+    const now = new Date();
     if (
-      new Date() < new Date(discount_start_date) ||
-      new Date() > new Date(discount_end_date)
+      now < new Date(discount_start_date) ||
+      now > new Date(discount_end_date)
     ) {
       throw new BadRequestError("Discount code is not valid at this time");
     }
-    let totalOrderValue = 0;
-    if (discount_min_order_value && discount_min_order_value > 0) {
-      totalOrderValue = products.reduce((acc, product) => {
-        return acc + product.product_price * product.product_quantity;
-      }, 0);
+
+    if (
+      discount_max_uses > 0 &&
+      discount_used_count >= discount_max_uses
+    ) {
+      throw new BadRequestError("Discount code has reached maximum uses");
     }
-    if (totalOrderValue < discount_min_order_value) {
+
+    const usersUsed = discount_users_used || [];
+    const userUseCount = usersUsed.filter(
+      (id) => String(id) === String(userId),
+    ).length;
+    if (
+      discount_max_uses_per_user > 0 &&
+      userUseCount >= discount_max_uses_per_user
+    ) {
+      throw new BadRequestError("User has already used this discount code");
+    }
+
+    const eligibleProductIds = discount_product_ids || [];
+    let eligibleProducts = products;
+
+    if (discount_apply_to === "specific") {
+      eligibleProducts = products.filter((product) =>
+        eligibleProductIds.includes(getProductId(product)),
+      );
+
+      if (eligibleProducts.length === 0) {
+        throw new BadRequestError(
+          "No eligible products found for this discount code",
+        );
+      }
+
+      const hasIneligibleProduct = products.some(
+        (product) => !eligibleProductIds.includes(getProductId(product)),
+      );
+      if (hasIneligibleProduct) {
+        throw new BadRequestError(
+          "Some products are not eligible for this discount code",
+        );
+      }
+    }
+
+    const totalOrderValue = eligibleProducts.reduce(
+      (acc, product) => acc + getProductLineTotal(product),
+      0,
+    );
+
+    if (totalOrderValue < Number(discount_min_order_value)) {
       throw new BadRequestError(
         `Order value must be at least ${discount_min_order_value} to use this discount code`,
       );
     }
-    //fixed_amount hay percentage
+
     let discountAmount = 0;
     if (discount_type === "fixed_amount") {
-      discountAmount = discount_value;
+      discountAmount = Number(discount_value);
     } else if (discount_type === "percentage") {
-      discountAmount = (totalOrderValue * discount_value) / 100;
-      if (discount_max_value && discountAmount > discount_max_value) {
-        discountAmount = discount_max_value;
+      discountAmount = (totalOrderValue * Number(discount_value)) / 100;
+      if (
+        discount_max_value > 0 &&
+        discountAmount > Number(discount_max_value)
+      ) {
+        discountAmount = Number(discount_max_value);
       }
     }
+
+    if (discountAmount > totalOrderValue) {
+      discountAmount = totalOrderValue;
+    }
+
     return {
       totalOrderValue,
       discountAmount,
@@ -235,29 +304,25 @@ class DiscountService {
     };
   }
 
-  static async deleteDiscountCode({ codeId, shopId }) {
-    const foundDiscount = await checkDiscountCodeExists(codeId, shopId);
+  static async deleteDiscountCode({ code, shopId }) {
+    const foundDiscount = await checkDiscountCodeExists(code, shopId);
     if (!foundDiscount) {
       throw new BadRequestError("Discount code not found for this shop");
     }
-
-    //TODO: Check if the discount code has been used by any user before allowing deletion and permission check
 
     const deleteDiscountQuery = `
-      DELETE FROM discounts WHERE id = $1 AND discount_shopId = $2 RETURNING *
+      DELETE FROM discounts WHERE discount_code = $1 AND discount_shopId = $2 RETURNING *
     `;
-    const deletedDiscount = await pool.query(deleteDiscountQuery, [
-      codeId,
-      shopId,
-    ]);
+    const deletedDiscount = await pool.query(deleteDiscountQuery, [code, shopId]);
     return deletedDiscount.rows[0];
   }
-  static async cancelDiscountCode({ codeId, userId, shopId }) {
-    const foundDiscount = await checkDiscountCodeExists(codeId, shopId);
+
+  static async cancelDiscountCode({ code, userId, shopId }) {
+    const foundDiscount = await checkDiscountCodeExists(code, shopId);
     if (!foundDiscount) {
       throw new BadRequestError("Discount code not found for this shop");
     }
-    const { discount_users_used } = foundDiscount;
+
     const usersUsed = foundDiscount.discount_users_used || [];
     if (!usersUsed.map(String).includes(String(userId))) {
       throw new BadRequestError("User has not used this discount code");
@@ -265,15 +330,14 @@ class DiscountService {
 
     const cancelDiscountQuery = `
       UPDATE discounts
-      SET discount_users_used = array_remove(discount_users_used, $1),
-          discount_used_count = discount_used_count - 1,
-          discount_max_uses = discount_max_uses + 1
-      WHERE id = $2 AND discount_shopId = $3
+      SET discount_users_used = array_remove(discount_users_used, $1::varchar),
+          discount_used_count = GREATEST(discount_used_count - 1, 0)
+      WHERE discount_code = $2 AND discount_shopId = $3
       RETURNING *
     `;
     const cancelledDiscount = await pool.query(cancelDiscountQuery, [
-      userId,
-      codeId,
+      String(userId),
+      code,
       shopId,
     ]);
     return cancelledDiscount.rows[0];

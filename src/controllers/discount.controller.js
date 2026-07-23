@@ -20,11 +20,12 @@ class DiscountController {
     });
   };
   getDiscountAmount = async (req, res, next) => {
-    const { code, shopId } = req.query;
     OK.send(res, {
       message: "Get discount amount successfully!",
       metadata: await DiscountService.getDiscountAmount({
         ...req.body,
+        code: req.body.code || req.query.code,
+        shopId: req.body.shopId || req.query.shopId,
         userId: req.user.userId,
       }),
     });

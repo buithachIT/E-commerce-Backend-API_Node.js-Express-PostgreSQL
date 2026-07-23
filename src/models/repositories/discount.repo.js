@@ -11,11 +11,16 @@ const ALLOWED_DISCOUNT_COLUMNS = [
   "discount_value",
   "discount_max_value",
   "discount_max_uses",
-  "discount_uses_count",
+  "discount_used_count",
   "discount_max_uses_per_user",
-  "discount_applies_to",
+  "discount_apply_to",
   "discount_product_ids",
   "discount_shopId",
+  "discount_is_active",
+  "discount_start_date",
+  "discount_end_date",
+  "discount_min_order_value",
+  "discount_users_used",
   "created_at",
   "updated_at",
 ];
@@ -31,8 +36,14 @@ const findAllDiscountCodesSelect = async ({
 
   let selectColumns = "d.*";
   if (select.length > 0) {
-    selectColumns = select.map((col) => `d.${col}`).join(", ");
+    const safeFields = select.filter((col) =>
+      ALLOWED_DISCOUNT_COLUMNS.includes(col),
+    );
+    if (safeFields.length > 0) {
+      selectColumns = safeFields.map((col) => `d.${col}`).join(", ");
+    }
   }
+
   const whereClauses = [];
   const values = [];
 
@@ -40,20 +51,24 @@ const findAllDiscountCodesSelect = async ({
     values.push(filter.discount_shopId);
     whereClauses.push(`d.discount_shopId = $${values.length}`);
   }
-  /* Add more filter conditions here if needed */
+  if (filter.discount_is_active !== undefined) {
+    values.push(filter.discount_is_active);
+    whereClauses.push(`d.discount_is_active = $${values.length}`);
+  }
 
   const whereClause =
     whereClauses.length > 0 ? `WHERE ${whereClauses.join(" AND ")}` : "";
   const orderByClause =
-    sort == "ctime" ? `d.created_at DESC` : `d.created_at ASC`;
+    sort === "ctime" ? "d.created_at DESC" : "d.created_at ASC";
 
   values.push(limit, skip);
 
   const query = `
-  SELECT ${selectColumns}
-  FROM discounts d ${whereClause}
-  ORDER BY ${orderByClause}
-  LIMIT $${values.length - 1} OFFSET $${values.length};
+    SELECT ${selectColumns}
+    FROM discounts d
+    ${whereClause}
+    ORDER BY ${orderByClause}
+    LIMIT $${values.length - 1} OFFSET $${values.length};
   `;
   const result = await pool.query(query, values);
   return result.rows;
@@ -76,6 +91,7 @@ const findAllDiscountCodesUnSelect = async ({
   if (selectedFields.length > 0) {
     selectColumns = selectedFields.map((col) => `d.${col}`).join(", ");
   }
+
   const whereClauses = [];
   const values = [];
 
@@ -83,20 +99,24 @@ const findAllDiscountCodesUnSelect = async ({
     values.push(filter.discount_shopId);
     whereClauses.push(`d.discount_shopId = $${values.length}`);
   }
-  /* Add more filter conditions here if needed */
+  if (filter.discount_is_active !== undefined) {
+    values.push(filter.discount_is_active);
+    whereClauses.push(`d.discount_is_active = $${values.length}`);
+  }
 
   const whereClause =
     whereClauses.length > 0 ? `WHERE ${whereClauses.join(" AND ")}` : "";
   const orderByClause =
-    sort == "ctime" ? `d.created_at DESC` : `d.created_at ASC`;
+    sort === "ctime" ? "d.created_at DESC" : "d.created_at ASC";
 
   values.push(limit, skip);
 
   const query = `
-  SELECT ${selectColumns}
-  FROM discounts d ${whereClause}
-  ORDER BY ${orderByClause}
-  LIMIT $${values.length - 1} OFFSET $${values.length};
+    SELECT ${selectColumns}
+    FROM discounts d
+    ${whereClause}
+    ORDER BY ${orderByClause}
+    LIMIT $${values.length - 1} OFFSET $${values.length};
   `;
   const result = await pool.query(query, values);
   return result.rows;

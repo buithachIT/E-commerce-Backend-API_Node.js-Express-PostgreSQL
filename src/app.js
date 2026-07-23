@@ -2,6 +2,9 @@ const express = require("express");
 const morgan = require("morgan");
 const helmet = require("helmet");
 const compression = require("compression");
+const cors = require("cors");
+const swaggerUi = require("swagger-ui-express");
+const swaggerSpec = require("./configs/swagger");
 
 const app = express();
 app.use(express.json());
@@ -9,8 +12,30 @@ app.use(express.urlencoded({ extended: true }));
 
 // init middlewares
 app.use(morgan("dev"));
-app.use(helmet());
+app.use(cors());
+// CSP mặc định của helmet chặn Swagger UI → tắt CSP cho học/dev
+app.use(
+  helmet({
+    contentSecurityPolicy: false,
+    crossOriginResourcePolicy: { policy: "cross-origin" },
+  }),
+);
 app.use(compression());
+
+// API docs (không cần x-api-key)
+app.use(
+  "/api-docs",
+  swaggerUi.serve,
+  swaggerUi.setup(swaggerSpec, {
+    swaggerOptions: {
+      persistAuthorization: true,
+    },
+  }),
+);
+app.get("/api-docs.json", (req, res) => {
+  res.setHeader("Content-Type", "application/json");
+  res.send(swaggerSpec);
+});
 
 // init db
 require("./dbs/init.postgres");

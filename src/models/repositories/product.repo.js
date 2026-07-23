@@ -144,6 +144,16 @@ const findAllProducts = async ({
     whereClauses.push(`p.product_type = $${values.length}`);
   }
 
+  if (filter.product_shop) {
+    values.push(filter.product_shop);
+    whereClauses.push(`p.product_shop = $${values.length}`);
+  }
+
+  if (filter.product_ids && filter.product_ids.length > 0) {
+    values.push(filter.product_ids);
+    whereClauses.push(`p.id = ANY($${values.length})`);
+  }
+
   const orderByClause =
     sort === "ctime"
       ? "p.updated_at DESC, p.id DESC"
@@ -155,10 +165,6 @@ const findAllProducts = async ({
   values.push(offset);
   const offsetPlaceholder = `$${values.length}`;
 
-  if (filter.product_ids && filter.product_ids.length > 0) {
-    values.push(filter.product_ids);
-    whereClauses.push(`p.id = ANY($${values.length})`);
-  }
   const sql = `
     SELECT ${selectColumns}
     FROM products p
@@ -265,6 +271,25 @@ const unPublishProductByShop = async ({ product_shop, product_id }) => {
   throw new BadRequestError("Update unsuccessful!");
 };
 
+const getProductById = async ({ product_id }) => {
+  const getProductByIdQuery = `SELECT * FROM products WHERE id = $1`;
+  const result = await pool.query(getProductByIdQuery, [product_id]);
+  return result.rows[0];
+};
+
+const getProductsByIds = async (productIds = []) => {
+  if (!productIds.length) return [];
+
+  const result = await pool.query(
+    `SELECT id, product_name, product_price, product_quantity,
+            product_shop, product_thumb, is_published, is_draft
+     FROM products
+     WHERE id = ANY($1::uuid[])`,
+    [productIds],
+  );
+  return result.rows;
+};
+
 module.exports = {
   findAllPublishedProductByShop,
   findAllDraftProductByShop,
@@ -275,4 +300,6 @@ module.exports = {
   updateProductRepo,
   updateElectronicsRepo,
   updateClothingRepo,
+  getProductById,
+  getProductsByIds,
 };
