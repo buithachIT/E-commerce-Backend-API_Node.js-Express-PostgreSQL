@@ -6,7 +6,7 @@ const options = {
   definition: {
     openapi: "3.0.3",
     info: {
-      title: "E-commerce Backend API",
+      title: "E-commerce Backend API - BuiThach",
       version: "1.0.0",
       description:
         "REST API for e-commerce: auth (login, forgot password, email verification), products, cart, vouchers, checkout review. All routes except /api-docs require header `x-api-key`. Protected routes also need `authorization` + `x-client-id`.",
