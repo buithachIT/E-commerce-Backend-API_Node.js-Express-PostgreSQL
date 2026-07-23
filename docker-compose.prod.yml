@@ -1,0 +1,59 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: ecommerce-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${PROD_DB_USER}
+      POSTGRES_PASSWORD: ${PROD_DB_PASSWORD}
+      POSTGRES_DB: ${PROD_DB_NAME}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./docs/shopee_clone_db.sql:/docker-entrypoint-initdb.d/01_schema.sql:ro
+    # Do NOT expose Postgres to the public internet
+    expose:
+      - "5432"
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${PROD_DB_USER} -d ${PROD_DB_NAME}",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - ecommerce
+
+  api:
+    build:
+      context: .
+      dockerfile: dockerfile
+    container_name: ecommerce-api
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: production
+      PORT: 3055
+      PROD_DB_HOST: postgres
+      PROD_DB_PORT: 5432
+      PROD_DB_USER: ${PROD_DB_USER}
+      PROD_DB_PASSWORD: ${PROD_DB_PASSWORD}
+      PROD_DB_NAME: ${PROD_DB_NAME}
+      APP_URL: ${APP_URL:-https://api-ecommerce.nasbui.site}
+    # Only reachable from host / Nginx on localhost
+    ports:
+      - "127.0.0.1:3055:3055"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - ecommerce
+
+volumes:
+  postgres_data:
+
+networks:
+  ecommerce:
+    driver: bridge

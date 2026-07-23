@@ -2,7 +2,7 @@
 
 const dev = {
   app: {
-    port: process.env.DEV_APP_PORT || 3052,
+    port: process.env.DEV_APP_PORT,
   },
   db: {
     host: process.env.DEV_DB_HOST,
@@ -14,14 +14,14 @@ const dev = {
 };
 const prod = {
   app: {
-    port: process.env.PROD_APP_PORT || 3052,
+    port: process.env.PROD_APP_PORT,
   },
   db: {
-    host: process.env.PROD_DB_HOST || "localhost",
-    port: process.env.PROD_DB_PORT || 5432,
-    database: process.env.PROD_DB_NAME || "shopee_clone",
-    user: process.env.PROD_DB_USER || "postgres",
-    password: process.env.PROD_DB_PASSWORD || "thach31112003",
+    host: process.env.PROD_DB_HOST,
+    port: process.env.PROD_DB_PORT,
+    database: process.env.PROD_DB_NAME,
+    user: process.env.PROD_DB_USER,
+    password: process.env.PROD_DB_PASSWORD,
   },
 };
 
@@ -30,5 +30,6 @@ const config = {
   prod,
 };
 
-const env = process.env.NODE_ENV || "dev";
-module.exports = config[env];
+const rawEnv = process.env.NODE_ENV || "dev";
+const env = rawEnv === "production" ? "prod" : rawEnv;
+module.exports = config[env] || config.dev;

@@ -13,7 +13,6 @@ app.use(express.urlencoded({ extended: true }));
 // init middlewares
 app.use(morgan("dev"));
 app.use(cors());
-// CSP mặc định của helmet chặn Swagger UI → tắt CSP cho học/dev
 app.use(
   helmet({
     contentSecurityPolicy: false,
@@ -21,6 +20,10 @@ app.use(
   }),
 );
 app.use(compression());
+
+app.get("/health", (req, res) => {
+  res.status(200).json({ status: "ok" });
+});
 
 // API docs (không cần x-api-key)
 app.use(

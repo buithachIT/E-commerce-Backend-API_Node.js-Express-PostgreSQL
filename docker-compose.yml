@@ -1,0 +1,54 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: ecommerce-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DEV_DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DEV_DB_PASSWORD:-postgres}
+      POSTGRES_DB: ${DEV_DB_NAME:-shopee_clone}
+    ports:
+      - "${DEV_DB_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./docs/shopee_clone_db.sql:/docker-entrypoint-initdb.d/01_schema.sql:ro
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${DEV_DB_USER:-postgres} -d ${DEV_DB_NAME:-shopee_clone}",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build:
+      context: .
+      dockerfile: dockerfile
+    container_name: ecommerce-api
+    restart: unless-stopped
+    ports:
+      - "${PORT:-3055}:3055"
+    env_file:
+      - .env
+    environment:
+      # Inside Docker network, DB host is the service name — not localhost
+      NODE_ENV: ${NODE_ENV:-dev}
+      PORT: ${PORT:-3055}
+      DEV_DB_HOST: postgres
+      DEV_DB_PORT: 5432
+      DEV_DB_USER: ${DEV_DB_USER:-postgres}
+      DEV_DB_PASSWORD: ${DEV_DB_PASSWORD:-postgres}
+      DEV_DB_NAME: ${DEV_DB_NAME:-shopee_clone}
+      PROD_DB_HOST: postgres
+      PROD_DB_PORT: 5432
+      PROD_DB_USER: ${PROD_DB_USER:-postgres}
+      PROD_DB_PASSWORD: ${PROD_DB_PASSWORD:-postgres}
+      PROD_DB_NAME: ${PROD_DB_NAME:-shopee_clone}
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  postgres_data:

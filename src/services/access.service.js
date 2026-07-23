@@ -89,19 +89,16 @@ class AccessService {
   };
 
   static login = async ({ email, password, refreshToken = null }) => {
-    //step 1: check email dbs
     const foundUser = await findByEmail({ email });
     if (!foundUser) {
       throw new BadRequestError("Shop not registered!");
     }
 
-    //step 2 : match password
     const match = await bcrypt.compare(password, foundUser.password);
     if (!match) {
       throw new AuthFailureError("Authentication error!");
     }
 
-    //step3: generate AT & RF tokens
     const userId = foundUser.id;
     const privateKey = crypto.randomBytes(64).toString("hex");
     const publicKey = crypto.randomBytes(64).toString("hex");
@@ -117,106 +114,69 @@ class AccessService {
       privateKey,
       refresh_token: tokens.refreshToken,
     });
-    //step4: get data and return
+
     return {
-      metadata: {
-        account: getDataInfo({
-          fields: ["email", "user_name"],
-          object: foundUser,
-        }),
-        tokens,
-      },
+      account: getDataInfo({
+        fields: ["email", "user_name"],
+        object: foundUser,
+      }),
+      tokens,
     };
   };
+
   static signUp = async ({ email, password }) => {
-    try {
-      //Step 1: Check if email already exists
-
-      const checkEmailQuery = "SELECT * FROM accounts WHERE email=$1 LIMIT 1";
-
-      const checkEmailResult = await pool.query(checkEmailQuery, [email]);
-
-      if (checkEmailResult.rows.length > 0) {
-        throw new BadRequestError("Error: Shop already registered!");
-      }
-      //Step 2: Hash password
-
-      const hashedPassword = await bcrypt.hash(password, 10);
-      const user_name = email.split("@")[0];
-
-      //Step 3: Create new user in database
-
-      const createUserQuery =
-        "INSERT INTO accounts (email, user_name, password) VALUES ($1, $2, $3) RETURNING id, email, user_name";
-
-      const newAccount = await pool.query(createUserQuery, [
-        email,
-        user_name,
-        hashedPassword,
-      ]);
-
-      if (newAccount.rows.length > 0) {
-        // const { privateKey, publicKey } = crypto.generateKeyPairSync("rsa", {
-        //   modulusLength: 4096,
-        //   publicKeyEncoding: {
-        //     type: "pkcs1",
-        //     format: "pem",
-        //   },
-        //   privateKeyEncoding: {
-        //     type: "pkcs1",
-        //     format: "pem",
-        //   },
-        // });
-
-        const privateKey = crypto.randomBytes(64).toString("hex");
-        const publicKey = crypto.randomBytes(64).toString("hex");
-
-        //Public key cryptography standard 1 (PKCS1) là một tiêu chuẩn mã hóa được sử dụng trong lĩnh vực mật mã học để định nghĩa cách thức mã hóa và giải mã dữ liệu bằng cách sử dụng cặp khóa công khai và khóa riêng. PKCS1 được phát triển bởi RSA Laboratories và là một phần của bộ tiêu chuẩn PKCS (Public-Key Cryptography Standards).
-
-        //create token pair
-        const tokens = await createTokenPair(
-          { userId: newAccount.rows[0].id, email },
-          publicKey,
-          privateKey,
-        );
-        const publicKeyString = await KeyTokenService.createKeyToken({
-          userId: newAccount.rows[0].id,
-          publicKey: publicKey,
-          privateKey: privateKey,
-          refresh_token: tokens.refreshToken,
-        });
-
-        if (!publicKeyString) {
-          return {
-            code: 400,
-            message: "publicKeyString error!",
-          };
-        }
-        console.log(`check tokens: `, tokens);
-        return {
-          code: 201,
-          metadata: {
-            account: getDataInfo({
-              fields: ["email", "user_name"],
-              object: newAccount.rows[0],
-            }),
-            tokens,
-          },
-        };
-      }
-
-      //Step 4: Return success response
-      return {
-        code: 201,
-        metadata: null,
-      };
-    } catch (error) {
-      return {
-        code: 400,
-        message: error.message,
-        status: "error",
-      };
+    if (!email || !password) {
+      throw new BadRequestError("Email and password are required!");
     }
+
+    const checkEmailResult = await pool.query(
+      "SELECT id FROM accounts WHERE email=$1 LIMIT 1",
+      [email],
+    );
+    if (checkEmailResult.rows.length > 0) {
+      throw new BadRequestError("Shop already registered!");
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+    const user_name = email.split("@")[0];
+
+    const newAccount = await pool.query(
+      "INSERT INTO accounts (email, user_name, password) VALUES ($1, $2, $3) RETURNING id, email, user_name",
+      [email, user_name, hashedPassword],
+    );
+
+    if (!newAccount.rows.length) {
+      throw new BadRequestError("Failed to create account!");
+    }
+
+    const account = newAccount.rows[0];
+    const privateKey = crypto.randomBytes(64).toString("hex");
+    const publicKey = crypto.randomBytes(64).toString("hex");
+
+    const tokens = await createTokenPair(
+      { userId: account.id, email },
+      publicKey,
+      privateKey,
+    );
+
+    const publicKeyString = await KeyTokenService.createKeyToken({
+      userId: account.id,
+      publicKey,
+      privateKey,
+      refresh_token: tokens.refreshToken,
+    });
+
+    if (!publicKeyString) {
+      throw new BadRequestError("Failed to create key store!");
+    }
+
+    return {
+      account: getDataInfo({
+        fields: ["email", "user_name"],
+        object: account,
+      }),
+      tokens,
+    };
   };
 }
 module.exports = AccessService;

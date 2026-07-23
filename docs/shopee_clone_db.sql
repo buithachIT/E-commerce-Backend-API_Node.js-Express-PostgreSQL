@@ -13,7 +13,7 @@ CREATE TABLE key_stores (
     public_key TEXT NOT NULL,
     private_key TEXT NOT NULL,
     refresh_token VARCHAR(255),
-    refresh_token_used VARCHAR(255)[] DEFAULT '{}',
+    refresh_tokens_used VARCHAR(255)[] DEFAULT '{}',
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
@@ -30,6 +30,15 @@ CREATE TABLE IF NOT EXISTS api_keys (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
+
+-- Default API key for local / Docker (permission 0000 = full access in this project)
+INSERT INTO api_keys (key, status, permissions)
+VALUES (
+  'ead7995a27c5e17ec3dea9eb99794effb22e1e51d8f54771a258abce99f381677400f788f42b3ade31aae8dcf42e9d6b51238e3dfd1154bc2cb285b2d70d6b8e',
+  TRUE,
+  ARRAY['0000']::key_permission[]
+)
+ON CONFLICT (key) DO NOTHING;
 
 CREATE TABLE IF NOT EXISTS products (
     id UUID PRIMARY KEY,                               
@@ -105,11 +114,10 @@ CREATE TABLE discounts (
     discount_max_value DECIMAL(12, 2) NOT NULL DEFAULT 0 CHECK (discount_max_value >= 0),
     discount_shopId INTEGER NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
     discount_is_active BOOLEAN DEFAULT TRUE,
-    discount_apply_to VARCHAR(255) NOT NULL DEFAULT 'all' CHECK (discount_apply_to IN ('all', 'specific'))
-    discount_product_ids UUID[] DEFAULT '{}'
-
+    discount_apply_to VARCHAR(255) NOT NULL DEFAULT 'all' CHECK (discount_apply_to IN ('all', 'specific')),
+    discount_product_ids UUID[] DEFAULT '{}',
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
 

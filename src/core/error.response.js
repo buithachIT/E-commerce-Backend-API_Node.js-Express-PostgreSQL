@@ -7,12 +7,14 @@ const {
 const reasonPhraseUtil = require("../utils/reason-phrases.util");
 
 const StatusCode = {
+  BAD_REQUEST: 400,
   FORBIDDEN: 403,
   CONFLICT: 409,
 };
 
 const ReasonStatusCode = {
-  FORBIDDEN: "Bad request error",
+  BAD_REQUEST: "Bad request error",
+  FORBIDDEN: "Forbidden error",
   CONFLICT: "Conflict error",
 };
 
@@ -34,8 +36,8 @@ class ConflictRequestError extends ErrorResponse {
 
 class BadRequestError extends ErrorResponse {
   constructor(
-    message = ReasonStatusCode.FORBIDDEN,
-    statusCode = StatusCode.FORBIDDEN,
+    message = ReasonStatusCode.BAD_REQUEST,
+    statusCode = StatusCode.BAD_REQUEST,
   ) {
     super(message, statusCode);
   }

@@ -13,8 +13,8 @@ const options = {
     },
     servers: [
       {
-        url: `http://localhost:${process.env.PORT || 3055}`,
-        description: "Local server",
+        url: process.env.APP_URL || `http://localhost:${process.env.PORT || 3055}`,
+        description: process.env.APP_URL ? "Production" : "Local",
       },
     ],
     components: {
