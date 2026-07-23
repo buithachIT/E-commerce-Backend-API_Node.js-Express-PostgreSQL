@@ -45,10 +45,10 @@ cd /opt/api-ecommerce   # or your path
 # git clone / pull already done
 ```
 
-### 2. `.env.production`
+### 2. `.env` (never commit)
 
 ```bash
-nano .env.production
+nano .env
 ```
 
 ```env
@@ -62,7 +62,7 @@ PROD_DB_USER=ecommerce
 PROD_DB_PASSWORD=<STRONG_PASSWORD>
 PROD_DB_NAME=ecommerce
 
-# Docker network name of Nginx Proxy Manager (see below)
+# Docker network name of Nginx Proxy Manager
 NPM_NETWORK=nginxproxymanager_default
 ```
 
@@ -78,7 +78,7 @@ Set `NPM_NETWORK=...` exactly as listed.
 ### 3. Start API + Postgres
 
 ```bash
-docker compose --env-file .env.production -f docker-compose.prod.yml up -d --build
+docker compose --env-file .env -f docker-compose.prod.yml up -d --build
 curl http://127.0.0.1:3055/health
 # expect: {"status":"ok"}
 ```
@@ -87,7 +87,7 @@ If error `network ... not found`:
 
 ```bash
 docker network ls
-# fix NPM_NETWORK in .env.production, then up again
+# fix NPM_NETWORK in .env, then up again
 ```
 
 ### 4. Disable host Nginx (avoid fighting NPM for :80)
@@ -171,7 +171,7 @@ sudo ufw enable
 Update `deploy.yml` / `deploy.sh` to use:
 
 ```bash
-docker compose --env-file .env.production -f docker-compose.prod.yml up -d --build
+docker compose --env-file .env -f docker-compose.prod.yml up -d --build
 ```
 
 ---
@@ -191,7 +191,7 @@ Swagger → Authorize → `x-api-key` from `api_keys` table.
 ## Checklist
 
 - [ ] Cloudflare A record `api-ecommerce`
-- [ ] `.env.production` + `NPM_NETWORK` correct
+- [ ] `.env` + `NPM_NETWORK` correct
 - [ ] `docker compose ... up -d --build` + local `/health` OK
 - [ ] Host nginx disabled
 - [ ] NPM Proxy Host → `ecommerce-api:3055` + SSL

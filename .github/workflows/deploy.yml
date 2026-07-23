@@ -29,18 +29,32 @@ jobs:
           port: ${{ secrets.VPS_PORT || 22 }}
           script_stop: true
           script: |
-            set -e
-            cd ${{ secrets.VPS_APP_PATH }}
+            set -euo pipefail
 
-            echo ">>> Pulling latest code..."
-            git fetch origin
-            git reset --hard origin/main || git reset --hard origin/master
+            APP_PATH="${{ secrets.VPS_APP_PATH }}"
+            echo ">>> APP_PATH=$APP_PATH"
+            echo ">>> whoami=$(whoami) pwd_before=$(pwd)"
 
-            echo ">>> Building & restarting containers..."
-            docker compose --env-file .env.production -f docker-compose.prod.yml up -d --build
+            if [ -z "$APP_PATH" ]; then
+              echo "ERROR: VPS_APP_PATH secret is empty"
+              exit 1
+            fi
 
-            echo ">>> Waiting for API..."
+            cd "$APP_PATH"
+            echo ">>> pwd=$(pwd)"
+            echo ">>> remote=$(git remote -v | head -n 2)"
+            echo ">>> BEFORE=$(git rev-parse --short HEAD) branch=$(git rev-parse --abbrev-ref HEAD)"
+
+            git fetch origin --prune
+            git checkout main 2>/dev/null || git checkout master
+            git reset --hard origin/main 2>/dev/null || git reset --hard origin/master
+
+            echo ">>> AFTER=$(git rev-parse --short HEAD) ($(git log -1 --oneline))"
+
+            docker compose --env-file .env -f docker-compose.prod.yml up -d --build
+
             sleep 5
             curl -fsS http://127.0.0.1:3055/health
-
+            echo
             echo ">>> Deploy OK"
+

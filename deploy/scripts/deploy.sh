@@ -10,7 +10,7 @@ git fetch origin
 git reset --hard "origin/${BRANCH:-main}"
 
 echo ">>> Rebuild..."
-docker compose --env-file .env.production -f docker-compose.prod.yml up -d --build
+docker compose --env-file .env -f docker-compose.prod.yml up -d --build
 
 echo ">>> Health check..."
 sleep 3
