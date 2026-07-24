@@ -8,6 +8,8 @@ const {
 const { getProductsByIds } = require("../models/repositories/product.repo");
 const DiscountService = require("./discount.service");
 
+const { acquireLock, releaseLock}  = require("./redis.service");
+
 class CheckoutService {
   /*
     Payload:
@@ -225,9 +227,22 @@ class CheckoutService {
       }
     }
     //get new array of product ids
-    
-
+    const products = shop_order_ids_new.flatMap(order => order.item_products);
+    console.log(`[1]::`, products)
+    const acquireProduct = [];
+    for(let i = 0; i < products.length; i++){
+      const {productId, quantity} = products[i];
+      const keyLock = await acquireLock(productId, quantity, cartId);
+      acquireLock.push(keyLock ? true: false)
+      if(keyLock){
+        await releaseLock(keyLock);
+      } else {
+        throw new BadRequestError(`Product is not available!`);
+      }
     }
+    const newOrder = await order.createOrder
+    return newOrder;
+  }
 }
 
 module.exports = CheckoutService;

@@ -45,13 +45,17 @@ A RESTful backend for e-commerce workflows built with **Node.js, Express, and Po
 
 ## Roadmap
 
+**Auth Phase 1 — done** (see [docs/AUTH_PHASE1.md](docs/AUTH_PHASE1.md))
+
 - [x] Login flow (JWT + refresh token)
 - [x] Forgot password (reset via email)
-- [x] Email verification
+- [x] Email verification + resend
+- [x] Profile `GET /shop/me`
+- [ ] OAuth (Google / …) — later phase
 - [ ] `orderByUser`: create order + deduct stock + complete cart (single transaction)
 - [ ] Redis lock + inventory reservation
 - [ ] Unit / integration tests
-- [ ] Deploy to cloud (Railway / Render / VPS)
+- [x] Deploy to VPS (see [docs/DEPLOY.md](docs/DEPLOY.md))
 
 ---
 
@@ -180,6 +184,7 @@ After starting the server:
 | POST | `/v1/api/shop/reset-password` | Reset password with token |
 | POST | `/v1/api/shop/verify-email` | Verify email with token |
 | POST | `/v1/api/shop/resend-verification` | Resend verification email |
+| GET | `/v1/api/shop/me` | Get current user profile |
 | POST | `/v1/api/product` | Create product |
 | GET | `/v1/api/product/find-all` | List published products |
 | GET / POST / DELETE | `/v1/api/cart` | Cart operations |
@@ -212,6 +217,10 @@ Sample requests: `src/postman/access.post.http`
 
 | File | Description |
 |------|-------------|
+| `docs/AUTH_PHASE1.md` | **Auth Phase 1 guide** — verify email, forgot/reset, refresh headers, checklist |
+| `docs/DEPLOY.md` | Deploy VPS + NPM + Cloudflare |
+| `docs/CI_CD_EXPLAINED.md` | How CI/CD workflows work (explained) |
+| `docs/migrations/001_account_email_auth.sql` | Migration: email verify + reset columns |
 | `docs/shopee_clone_db.sql` | PostgreSQL schema |
 | `docs/requirements.md` | Business requirements |
 | `docs/architecture_db.md` | Why SQL over NoSQL |

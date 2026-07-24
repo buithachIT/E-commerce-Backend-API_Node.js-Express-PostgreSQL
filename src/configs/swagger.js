@@ -13,9 +13,18 @@ const options = {
     },
     servers: [
       {
-        url: process.env.APP_URL || `http://localhost:${process.env.PORT || 3055}`,
-        description: process.env.APP_URL ? "Production" : "Local",
+        url: `http://localhost:${process.env.PORT || 3055}`,
+        description: "Local",
       },
+      ...(process.env.APP_URL &&
+      !String(process.env.APP_URL).includes("localhost")
+        ? [
+            {
+              url: process.env.APP_URL,
+              description: "Production",
+            },
+          ]
+        : []),
     ],
     components: {
       securitySchemes: {
@@ -34,7 +43,14 @@ const options = {
           type: "apiKey",
           in: "header",
           name: "x-client-id",
-          description: "User/shop id",
+          description: "User/shop id (metadata.clientId hoặc user.id sau login)",
+        },
+        RefreshTokenAuth: {
+          type: "apiKey",
+          in: "header",
+          name: "x-refresh-token",
+          description:
+            "Refresh token JWT từ login (không bỏ vào Authorization, không gửi trong body)",
         },
       },
       schemas: {
@@ -150,20 +166,22 @@ const options = {
         post: {
           tags: ["Access"],
           summary: "Refresh access token",
-          security: [{ ApiKeyAuth: [] }, { BearerAuth: [] }, { ClientId: [] }],
-          requestBody: {
-            content: {
-              "application/json": {
-                schema: {
-                  type: "object",
-                  properties: {
-                    refreshToken: { type: "string" },
-                  },
-                },
-              },
+          description:
+            "Cần 3 header: `x-api-key`, `x-client-id`, `x-refresh-token`.\n\n" +
+            "Không dùng Bearer/Authorization cho API này.\n\n" +
+            "Refresh token chỉ dùng **1 lần** (rotation) — sau mỗi lần 200 phải lấy `refreshToken` mới trong response.",
+          security: [
+            { ApiKeyAuth: [] },
+            { ClientId: [] },
+            { RefreshTokenAuth: [] },
+          ],
+          responses: {
+            200: { description: "New accessToken + refreshToken pair" },
+            401: {
+              description:
+                "Thiếu/sai x-client-id hoặc x-refresh-token, hoặc token đã dùng rồi",
             },
           },
-          responses: { 200: { description: "New token pair" } },
         },
       },
       "/v1/api/shop/forgot-password": {
@@ -249,6 +267,19 @@ const options = {
             },
           },
           responses: { 200: { description: "Verification email sent" } },
+        },
+      },
+      "/v1/api/shop/me": {
+        get: {
+          tags: ["Access"],
+          summary: "Get current logged-in user profile",
+          security: [{ ApiKeyAuth: [] }, { BearerAuth: [] }, { ClientId: [] }],
+          responses: {
+            200: {
+              description:
+                "Returns id, email, user_name, avatar_url, email_verified, created_at",
+            },
+          },
         },
       },
 

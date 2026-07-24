@@ -4,6 +4,11 @@ CREATE TABLE accounts (
     user_name VARCHAR(255) UNIQUE NOT NULL,
     password VARCHAR(255) NOT NULL,
     avatar_url VARCHAR(255),
+    email_verified BOOLEAN DEFAULT FALSE,
+    email_verify_token VARCHAR(255),
+    email_verify_expires TIMESTAMPTZ,
+    password_reset_token VARCHAR(255),
+    password_reset_expires TIMESTAMPTZ,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -140,3 +145,42 @@ CREATE TABLE cart_items (
     CONSTRAINT unique_cart_product UNIQUE (cart_id, product_id) 
 );
 CREATE INDEX idx_cart_userid ON cart(cart_userid);
+
+-- Model B: 1 shop = 1 order (see docs/migrations/002_orders.sql)
+CREATE TABLE IF NOT EXISTS orders (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  order_user_id INTEGER NOT NULL REFERENCES accounts(id) ON DELETE RESTRICT,
+  order_shop_id INTEGER NOT NULL REFERENCES accounts(id) ON DELETE RESTRICT,
+  order_cart_id INTEGER REFERENCES cart(id) ON DELETE SET NULL,
+
+  order_checkout JSONB NOT NULL DEFAULT '{}'::jsonb,
+  order_shipping JSONB DEFAULT '{}'::jsonb,
+  order_payment JSONB DEFAULT '{}'::jsonb,
+
+  order_status VARCHAR(50) NOT NULL DEFAULT 'pending'
+    CHECK (order_status IN ('pending', 'confirmed', 'shipped', 'delivered', 'cancelled')),
+  payment_status VARCHAR(50) NOT NULL DEFAULT 'unpaid'
+    CHECK (payment_status IN ('unpaid', 'paid', 'refunded')),
+
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS order_items (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  order_id UUID NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
+  product_id UUID NOT NULL REFERENCES products(id) ON DELETE RESTRICT,
+
+  product_name VARCHAR(255) NOT NULL,
+  product_price DECIMAL(12, 2) NOT NULL CHECK (product_price >= 0),
+  quantity INT NOT NULL CHECK (quantity > 0),
+  total_price DECIMAL(12, 2) NOT NULL CHECK (total_price >= 0),
+
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_orders_user ON orders(order_user_id);
+CREATE INDEX IF NOT EXISTS idx_orders_shop ON orders(order_shop_id);
+CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(order_status);
+CREATE INDEX IF NOT EXISTS idx_order_items_order ON order_items(order_id);
+CREATE INDEX IF NOT EXISTS idx_order_items_product ON order_items(product_id);
