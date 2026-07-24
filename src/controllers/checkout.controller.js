@@ -13,6 +13,16 @@ class CheckoutController {
       }),
     });
   };
+
+  orderByUser = async (req, res, next) => {
+    OK.send(res, {
+      message: "Order created successfully!",
+      metadata: await CheckoutService.orderByUser({
+        ...req.body,
+        userId: req.user.userId,
+      }),
+    });
+  };
 }
 
 module.exports = new CheckoutController();

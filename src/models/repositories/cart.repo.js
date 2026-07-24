@@ -2,20 +2,31 @@
 const { pool } = require("../../dbs/init.postgres");
 
 const getOrCreateCartId = async (userId) => {
-  const query = `
-    WITH ins AS (
-        INSERT INTO cart (cart_userid, cart_state)
-        VALUES ($1, 'active')
-        ON CONFLICT (cart_userid) DO NOTHING
-        RETURNING id
-    )
-    SELECT id FROM ins
-    UNION ALL
-    SELECT id FROM cart WHERE cart_userid = $1 AND cart_state = 'active'
-    LIMIT 1`;
+  const uid = String(userId);
 
-  const result = await pool.query(query, [String(userId)]);
-  return result.rows[0].id;
+  const active = await pool.query(
+    `SELECT id FROM cart WHERE cart_userid = $1 AND cart_state = 'active' LIMIT 1`,
+    [uid],
+  );
+  if (active.rows[0]) return active.rows[0].id;
+
+  // cart_userid is UNIQUE — reactivate completed/failed cart for next purchase
+  const reactivated = await pool.query(
+    `UPDATE cart
+     SET cart_state = 'active', updated_at = NOW()
+     WHERE cart_userid = $1
+     RETURNING id`,
+    [uid],
+  );
+  if (reactivated.rows[0]) return reactivated.rows[0].id;
+
+  const inserted = await pool.query(
+    `INSERT INTO cart (cart_userid, cart_state)
+     VALUES ($1, 'active')
+     RETURNING id`,
+    [uid],
+  );
+  return inserted.rows[0].id;
 };
 
 const updateUserCartQuantity = async ({ userId, product = {} }) => {
@@ -98,6 +109,35 @@ const getCartItemsByProductIds = async ({ cartId, productIds }) => {
   return result.rows;
 };
 
+const deleteCartItemsByProductIds = async (client, { cartId, productIds }) => {
+  if (!productIds.length) return [];
+
+  const result = await client.query(
+    `DELETE FROM cart_items
+     WHERE cart_id = $1 AND product_id = ANY($2::uuid[])
+     RETURNING *`,
+    [cartId, productIds],
+  );
+  return result.rows;
+};
+
+const markCartCompletedIfEmpty = async (client, cartId) => {
+  const remaining = await client.query(
+    `SELECT 1 FROM cart_items WHERE cart_id = $1 LIMIT 1`,
+    [cartId],
+  );
+  if (remaining.rows.length) return null;
+
+  const result = await client.query(
+    `UPDATE cart
+     SET cart_state = 'completed', updated_at = NOW()
+     WHERE id = $1
+     RETURNING *`,
+    [cartId],
+  );
+  return result.rows[0] || null;
+};
+
 module.exports = {
   getOrCreateCartId,
   updateUserCartQuantity,
@@ -105,4 +145,6 @@ module.exports = {
   clearUserCart,
   findActiveCartByIdAndUser,
   getCartItemsByProductIds,
+  deleteCartItemsByProductIds,
+  markCartCompletedIfEmpty,
 };

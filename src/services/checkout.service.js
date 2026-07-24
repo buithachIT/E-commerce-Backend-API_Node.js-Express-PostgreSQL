@@ -1,14 +1,24 @@
 "use strict";
 
 const { BadRequestError, NotFoundError } = require("../core/error.response");
+const { pool } = require("../dbs/init.postgres");
+const { runInTransaction } = require("../helpers/async-handler");
 const {
   findActiveCartByIdAndUser,
   getCartItemsByProductIds,
+  deleteCartItemsByProductIds,
+  markCartCompletedIfEmpty,
 } = require("../models/repositories/cart.repo");
 const { getProductsByIds } = require("../models/repositories/product.repo");
+const { deductStock } = require("../models/repositories/inventory.repo");
+const {
+  createOrder,
+  createOrderItems,
+} = require("../models/repositories/order.repo");
+const {
+  incrementDiscountUsage,
+} = require("../models/repositories/discount.repo");
 const DiscountService = require("./discount.service");
-
-const { acquireLock, releaseLock}  = require("./redis.service");
 
 class CheckoutService {
   /*
@@ -44,9 +54,14 @@ class CheckoutService {
       getCartItemsByProductIds({ cartId, productIds }),
     ]);
 
-    const productMap = new Map(products.map((row) => [String(row.id).toLowerCase(), row]));
+    const productMap = new Map(
+      products.map((row) => [String(row.id).toLowerCase(), row]),
+    );
     const cartItemMap = new Map(
-      cartItems.map((row) => [String(row.product_id).toLowerCase(), Number(row.quantity)]),
+      cartItems.map((row) => [
+        String(row.product_id).toLowerCase(),
+        Number(row.quantity),
+      ]),
     );
 
     const checkedProducts = [];
@@ -61,7 +76,7 @@ class CheckoutService {
 
       const productKey = String(productId).toLowerCase();
       const foundProduct = productMap.get(productKey);
-      
+
       if (!foundProduct) {
         throw new NotFoundError(`Product ${productId} not found!`);
       }
@@ -151,7 +166,6 @@ class CheckoutService {
       throw new BadRequestError("shop_order_ids is required!");
     }
 
-    // Đảm bảo findActiveCartByIdAndUser của em check đúng cartId kiểu INT và cart_state = 'active'
     const foundCart = await findActiveCartByIdAndUser({ cartId, userId });
     if (!foundCart) {
       throw new NotFoundError("Cart not found or not active!");
@@ -212,36 +226,81 @@ class CheckoutService {
       shop_order_ids: shop_order_ids_new,
     };
   }
-  static async orderByUser({ shop_order_ids = [], user_address = {}, user_payment = {}, cartId, userId,  }) {
-    const { checkout_order, shop_order_ids: shop_order_ids_new } = await this.checkoutReviewOrder({ cartId, userId, shop_order_ids });
 
-    // check lại một lần nữa xem vượt tồn kho hay không
-    for (const shopOrder of shop_order_ids_new) {
-      for (const product of shopOrder.item_products) {
-        const productId = product.productId;
-        const quantity = product.quantity;
-        const product = await getProductById(productId);
-        if (product.product_quantity < quantity) {
-          throw new BadRequestError(`Insufficient stock for product ${product.product_name}!`);
+  static async orderByUser({
+    shop_order_ids = [],
+    user_address = {},
+    user_payment = {},
+    cartId,
+    userId,
+  }) {
+    const { checkout_order, shop_order_ids: shopOrders } =
+      await this.checkoutReviewOrder({ cartId, userId, shop_order_ids });
+
+    const createdOrders = await runInTransaction(pool, async (client) => {
+      const orders = [];
+      const orderedProductIds = [];
+
+      for (const shopOrder of shopOrders) {
+        for (const item of shopOrder.item_products) {
+          await deductStock(client, {
+            productId: item.productId,
+            quantity: item.quantity,
+          });
+          orderedProductIds.push(item.productId);
         }
+
+        const orderCheckout = {
+          totalPrice: shopOrder.priceRaw,
+          totalDiscount: shopOrder.priceRaw - shopOrder.priceApplyDiscount,
+          totalCheckout: shopOrder.priceApplyDiscount,
+          feeShip: 0,
+          shop_discounts: shopOrder.shop_discounts,
+        };
+
+        const order = await createOrder(client, {
+          userId,
+          shopId: shopOrder.shopId,
+          cartId,
+          orderCheckout,
+          orderShipping: user_address,
+          orderPayment: user_payment,
+          orderStatus: "pending",
+          paymentStatus: "unpaid",
+        });
+
+        const items = await createOrderItems(
+          client,
+          order.id,
+          shopOrder.item_products,
+        );
+
+        for (const discount of shopOrder.shop_discounts || []) {
+          if (!discount.code) continue;
+          await incrementDiscountUsage(client, {
+            code: discount.code,
+            shopId: shopOrder.shopId,
+            userId,
+          });
+        }
+
+        orders.push({ ...order, items });
       }
-    }
-    //get new array of product ids
-    const products = shop_order_ids_new.flatMap(order => order.item_products);
-    console.log(`[1]::`, products)
-    const acquireProduct = [];
-    for(let i = 0; i < products.length; i++){
-      const {productId, quantity} = products[i];
-      const keyLock = await acquireLock(productId, quantity, cartId);
-      acquireLock.push(keyLock ? true: false)
-      if(keyLock){
-        await releaseLock(keyLock);
-      } else {
-        throw new BadRequestError(`Product is not available!`);
-      }
-    }
-    const newOrder = await order.createOrder
-    return newOrder;
+
+      const uniqueProductIds = [...new Set(orderedProductIds.map(String))];
+      await deleteCartItemsByProductIds(client, {
+        cartId,
+        productIds: uniqueProductIds,
+      });
+      await markCartCompletedIfEmpty(client, cartId);
+
+      return orders;
+    });
+
+    return {
+      checkout_order,
+      orders: createdOrders,
+    };
   }
 }
 

@@ -1,6 +1,8 @@
 "use strict";
 
 const { runInTransaction } = require("../../helpers/async-handler");
+const { pool } = require("../../dbs/init.postgres");
+const { BadRequestError, NotFoundError } = require("../../core/error.response");
 
 const insertInventory = async ({
   client,
@@ -24,45 +26,99 @@ const insertInventory = async ({
 };
 
 /**
- * Hàm đặt giữ kho (Reservation Inventory) - chịu tải
- * @param {string} productId - ID sản phẩm
- * @param {number} quatity - Số lượng sản phẩm
- * @param {string} cartId - ID giỏ hàng
- * @returns {Promise<object>} - Object reservation
+ * Deduct stock inside an existing transaction (products + inventories).
+ * Uses SELECT ... FOR UPDATE for concurrency safety.
  */
-const reservationInventory = async ({productId, quatity, cartId})=>{
-  const numQuantity = Number(quatity);
-  if(numQuantity <= 0) return 0;
+const deductStock = async (client, { productId, quantity }) => {
+  const numQuantity = Number(quantity);
+  if (!productId || numQuantity <= 0) {
+    throw new BadRequestError("Invalid stock deduction request!");
+  }
 
-  return await runInTransaction(pool, async (client)=>{
+  const productResult = await client.query(
+    `SELECT id, product_name, product_quantity
+     FROM products
+     WHERE id = $1
+     FOR UPDATE`,
+    [productId],
+  );
 
-    //Khóa dòng kho của sản phẩm
-    const queryLockInventory = `
-    SELECT id, inven_stock FROM inventories WHERE inven_product_id = $1 FOR UPDATE`;
+  const product = productResult.rows[0];
+  if (!product) {
+    throw new NotFoundError(`Product ${productId} not found!`);
+  }
+  if (Number(product.product_quantity) < numQuantity) {
+    throw new BadRequestError(
+      `Insufficient stock for ${product.product_name}!`,
+    );
+  }
 
-    const result = await client.query(queryLockInventory, [productId]);
-    const inventory = result.rows[0];
+  await client.query(
+    `UPDATE products
+     SET product_quantity = product_quantity - $1,
+         updated_at = NOW()
+     WHERE id = $2`,
+    [numQuantity, productId],
+  );
 
-    //Check tồn kho
-    if(!inventory) throw new NotFoundError(`Inventory not found`);
-    if(Number(inventory.inven_stock) < numQuantity) throw new NotFoundError(`Product out of stock`);
+  const inventoryResult = await client.query(
+    `SELECT id, inven_stock
+     FROM inventories
+     WHERE inven_product_id = $1
+     FOR UPDATE`,
+    [productId],
+  );
 
-    //Trừ kho bảng cha inventories
-    const queryUpdateInventory = `
-    UPDATE inventories SET inven_stock = inven_stock - $1, update_at = NOW() WHERE id = $2`
-    await client.query(queryUpdateInventory, [numQuantity, inventory.id]);
-    //Update lại tồn kho
-    const queryInsertReservation = `
-    INSERT INTO inventory_reservations (inventory_id, cart_id, num_stock, created_on) VALUES ($1, $2, $3, NOW()) RETURNING *;`;
+  if (inventoryResult.rows.length) {
+    const inventory = inventoryResult.rows[0];
+    if (Number(inventory.inven_stock) < numQuantity) {
+      throw new BadRequestError(
+        `Insufficient inventory for ${product.product_name}!`,
+      );
+    }
 
-    const resultReservation = await client.query(queryInsertReservation, [inventory.id, cartId, numQuantity]);
-    const reservation = resultReservation.rows[0];
+    await client.query(
+      `UPDATE inventories
+       SET inven_stock = inven_stock - $1,
+           updated_at = NOW()
+       WHERE id = $2`,
+      [numQuantity, inventory.id],
+    );
+  }
 
-    //Return reservation
-    return resultReservation.rows[0];  
+  return {
+    productId,
+    quantity: numQuantity,
+    remaining: Number(product.product_quantity) - numQuantity,
+  };
+};
+
+/**
+ * Legacy helper (own transaction). Prefer deductStock(client, ...) in place-order.
+ */
+const reservationInventory = async ({ productId, quantity, quatity, cartId }) => {
+  const qty = quantity ?? quatity;
+  return runInTransaction(pool, async (client) => {
+    const result = await deductStock(client, { productId, quantity: qty });
+    if (cartId) {
+      const inv = await client.query(
+        `SELECT id FROM inventories WHERE inven_product_id = $1 LIMIT 1`,
+        [productId],
+      );
+      if (inv.rows[0]) {
+        await client.query(
+          `INSERT INTO inventory_reservations (inventory_id, cart_id, num_stock, created_on)
+           VALUES ($1, $2, $3, NOW())`,
+          [inv.rows[0].id, cartId, Number(qty)],
+        );
+      }
+    }
+    return result;
   });
-}
+};
+
 module.exports = {
   insertInventory,
+  deductStock,
   reservationInventory,
 };

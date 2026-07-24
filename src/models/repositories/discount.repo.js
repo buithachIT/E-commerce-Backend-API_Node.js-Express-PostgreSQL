@@ -130,8 +130,24 @@ const checkDiscountCodeExists = async (code, shopId) => {
   return result.rows.length > 0 ? result.rows[0] : null;
 };
 
+const incrementDiscountUsage = async (client, { code, shopId, userId }) => {
+  const result = await client.query(
+    `UPDATE discounts
+     SET discount_used_count = discount_used_count + 1,
+         discount_users_used = array_append(discount_users_used, $3::varchar),
+         updated_at = NOW()
+     WHERE discount_code = $1
+       AND discount_shopId = $2
+       AND discount_is_active = TRUE
+     RETURNING id, discount_code, discount_used_count`,
+    [code, Number(shopId), String(userId)],
+  );
+  return result.rows[0] || null;
+};
+
 module.exports = {
   findAllDiscountCodesSelect,
   findAllDiscountCodesUnSelect,
   checkDiscountCodeExists,
+  incrementDiscountUsage,
 };

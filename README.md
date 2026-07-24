@@ -35,7 +35,7 @@ A RESTful backend for e-commerce workflows built with **Node.js, Express, and Po
 
 ### Checkout
 - **Order review** before placement: server-side pricing, cart/stock/shop validation, voucher application
-- Order placement (`orderByUser`) — in progress
+- **Place order** (`POST /checkout/order`): 1 shop = 1 order, stock deduction + snapshots in one Postgres transaction
 
 ### Other
 - Swagger UI at `/api-docs`
@@ -52,9 +52,9 @@ A RESTful backend for e-commerce workflows built with **Node.js, Express, and Po
 - [x] Email verification + resend
 - [x] Profile `GET /shop/me`
 - [ ] OAuth (Google / …) — later phase
-- [ ] `orderByUser`: create order + deduct stock + complete cart (single transaction)
+- [x] `orderByUser`: create order + deduct stock + complete cart (single transaction)
 - [ ] Redis lock + inventory reservation
-- [ ] Unit / integration tests
+- [x] Unit tests (Jest — stock deduct, order repo, checkout review)
 - [x] Deploy to VPS (see [docs/DEPLOY.md](docs/DEPLOY.md))
 
 ---
@@ -149,6 +149,9 @@ See also: `docs/shopee_clone_db.sql`, `docs/database_schema.dbml`.
 # Development (auto reload)
 npm run dev
 
+# Unit tests (no DB required — mocked)
+npm test
+
 # Production
 npm start
 ```
@@ -191,6 +194,7 @@ After starting the server:
 | POST / GET | `/v1/api/discount` | Voucher management |
 | POST | `/v1/api/discount/amount` | Calculate discount |
 | POST | `/v1/api/checkout/review` | Review order before checkout |
+| POST | `/v1/api/checkout/order` | Place order (1 shop = 1 order) |
 
 Sample requests: `src/postman/access.post.http`
 
@@ -203,7 +207,7 @@ Sample requests: `src/postman/access.post.http`
 3. **Create & publish product** (shop)
 4. **Add to cart** (buyer)
 5. **Checkout review** with `cartId`, `shop_order_ids`, optional voucher
-6. *(Coming soon)* **Place order** → deduct stock, create order record
+6. **Place order** → deduct stock, create `orders` + `order_items`, complete cart items
 
 ### Forgot password flow
 

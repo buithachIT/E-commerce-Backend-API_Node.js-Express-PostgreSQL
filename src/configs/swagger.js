@@ -604,6 +604,97 @@ const options = {
         },
       },
 
+      "/v1/api/checkout/order": {
+        post: {
+          tags: ["Checkout"],
+          summary: "Đặt hàng (1 shop = 1 order, trừ kho + snapshot trong 1 transaction)",
+          description:
+            "Gọi lại checkout review (server tính giá), rồi trong 1 Postgres transaction: " +
+            "FOR UPDATE trừ `products` + `inventories`, INSERT `orders`/`order_items`, " +
+            "cập nhật voucher usage, xóa cart items đã mua (cart completed nếu hết item).",
+          security: [{ ApiKeyAuth: [] }, { BearerAuth: [] }, { ClientId: [] }],
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  required: ["cartId", "shop_order_ids"],
+                  properties: {
+                    cartId: { type: "integer" },
+                    user_address: {
+                      type: "object",
+                      additionalProperties: true,
+                    },
+                    user_payment: {
+                      type: "object",
+                      properties: {
+                        method: { type: "string", example: "COD" },
+                      },
+                    },
+                    shop_order_ids: {
+                      type: "array",
+                      items: {
+                        type: "object",
+                        properties: {
+                          shopId: { type: "integer" },
+                          shop_discounts: {
+                            type: "array",
+                            items: {
+                              type: "object",
+                              properties: { code: { type: "string" } },
+                            },
+                          },
+                          item_products: {
+                            type: "array",
+                            items: {
+                              type: "object",
+                              properties: {
+                                productId: {
+                                  type: "string",
+                                  format: "uuid",
+                                },
+                                quantity: { type: "integer" },
+                              },
+                            },
+                          },
+                        },
+                      },
+                    },
+                  },
+                },
+                example: {
+                  cartId: 1,
+                  user_address: {
+                    street: "123 Nguyen Hue",
+                    phone: "0901234567",
+                  },
+                  user_payment: { method: "COD" },
+                  shop_order_ids: [
+                    {
+                      shopId: 24,
+                      shop_discounts: [{ code: "SUMMER20" }],
+                      item_products: [
+                        {
+                          productId: "00000000-0000-0000-0000-000000000001",
+                          quantity: 2,
+                        },
+                      ],
+                    },
+                  ],
+                },
+              },
+            },
+          },
+          responses: {
+            200: {
+              description: "checkout_order + orders[] (mỗi shop một order + items)",
+            },
+            400: { description: "Stock / cart / validation error" },
+          },
+        },
+      },
+
       "/v1/api/discount": {
         post: {
           tags: ["Discount"],
